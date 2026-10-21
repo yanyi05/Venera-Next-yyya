@@ -13,6 +13,7 @@ import 'package:venera_next/features/reader/image_downloads.dart';
 import 'package:venera_next/foundation/image_work.dart';
 import 'package:venera_next/features/reader/image_position.dart';
 import 'package:venera_next/features/reader/comic_image.dart';
+import 'package:venera_next/features/reader/reader_image_masks.dart';
 import 'package:venera_next/features/reader/auto_reading.dart';
 import 'package:venera_next/features/reader/waterfall_flow.dart';
 import 'package:venera_next/foundation/context.dart';
@@ -929,6 +930,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
           imageRef.position.chapterId,
           imageRef.position.imageNumber,
           enableResize: true,
+          reloadRevision: data.imageRefreshRevision,
         );
 
         var comicImage = SizeChangedLayoutNotifier(
@@ -941,6 +943,12 @@ class ContinuousModeState extends State<ReaderContinuousView>
             splitWideImage: _splitWideImages,
             splitWideImageInvert: _splitWideImagesInvert,
             showImageDimensions: data.showImageDimensions,
+            maskAddress: ReaderImageAddress(
+              imageKey: imageRef.imageKey,
+              sourceKey: data.sourceKey,
+              comicId: data.comicId,
+              chapterId: imageRef.position.chapterId,
+            ),
             onInit: (state) => imageStates.add(state),
             onDispose: (state) => imageStates.remove(state),
           ),

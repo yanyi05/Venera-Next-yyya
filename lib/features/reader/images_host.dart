@@ -26,7 +26,10 @@ class ReaderImagesHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([ComicSourceManager.current]),
+    listenable: Listenable.merge([
+      ComicSourceManager.current,
+      reader.imageRefreshChanges,
+    ]),
     builder: (context, _) => _buildImages(context),
   );
 
@@ -147,6 +150,7 @@ class ReaderImagesHost extends StatelessWidget {
           sourceKey: source?.key,
           comicId: reader.cid,
           chapterId: reader.eid,
+          imageRefreshRevision: reader.imageRefreshRevision,
           showImageDimensions: preferences.showImageDimensions,
           observeImageReadiness: preferences.autoReadingSkipUnavailableImages,
         ),
@@ -200,6 +204,7 @@ class ReaderImagesHost extends StatelessWidget {
           centerLongPressZoom: preferences.longPressZoomPosition == 'center',
           sourceKey: reader.type.comicSource?.key,
           comicId: reader.cid,
+          imageRefreshRevision: reader.imageRefreshRevision,
         ),
         navigation: reader.controller,
         loadChapter: chapters.load,

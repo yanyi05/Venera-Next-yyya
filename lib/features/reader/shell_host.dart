@@ -20,6 +20,7 @@ class ReaderShellHost extends StatelessWidget {
       data: ReaderShellData(
         comicId: reader.cid,
         sourceKey: reader.type.sourceKey,
+        chapterId: reader.eid,
         title: reader.widget.name,
         chapterTitle: reader.widget.chapters?.titles.elementAtOrNull(
           reader.chapter - 1,
@@ -50,6 +51,7 @@ class ReaderShellHost extends StatelessWidget {
       createFavoriteQuery: reader.createImageFavoriteQuery,
       createImageFavorite: reader.createImageFavoriteRequest,
       createImageExport: reader.createImageExportRequest,
+      revalidateImage: reader.revalidateReaderImage,
       createSettings: reader.createSettingsRequest,
       createChapterComments: reader.createChapterCommentsRequest,
       child: child!,

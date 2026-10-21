@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:venera_next/features/reader/reader_tap_scope.dart';
 import 'package:venera_next/features/reader/image_position.dart';
+import 'package:venera_next/features/reader/reader_image_masks.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'image_dimensions.dart';
@@ -34,6 +35,7 @@ class ComicImage extends StatefulWidget {
     this.splitWideImage = false,
     this.splitWideImageInvert = false,
     this.showImageDimensions = false,
+    this.maskAddress,
     Map<String, String>? headers,
     int? cacheWidth,
     int? cacheHeight,
@@ -79,6 +81,7 @@ class ComicImage extends StatefulWidget {
 
   final bool splitWideImageInvert;
   final bool showImageDimensions;
+  final ReaderImageAddress? maskAddress;
 
   final void Function(State<ComicImage> state)? onInit;
 
@@ -483,10 +486,39 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
               child: result,
             );
           }
+          final maskAddress = widget.maskAddress;
           result = SizedBox(
             width: width,
             height: height,
-            child: Center(child: result),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Center(child: result),
+                if (maskAddress != null)
+                  AnimatedBuilder(
+                    animation: ReaderImageMasks.changes,
+                    builder: (context, _) {
+                      final masks = ReaderImageMasks.read(maskAddress);
+                      if (masks.isEmpty) return const SizedBox.shrink();
+                      return IgnorePointer(
+                        child: CustomPaint(
+                          painter: _ReaderMaskPainter(
+                            imageSize: imageSize,
+                            rectangles: masks,
+                            color: ReaderImageMasks.readColor(maskAddress),
+                            fit: widget.fit ?? BoxFit.scaleDown,
+                            alignment: widget.alignment.resolve(Directionality.maybeOf(context)),
+                            split: shouldSplit,
+                            splitInvert: widget.splitWideImageInvert,
+                            matchTextDirection: widget.matchTextDirection,
+                            textDirection: Directionality.maybeOf(context),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
           );
           return widget.showImageDimensions
               ? ImageDimensionsOverlay(
@@ -538,6 +570,84 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+class _ReaderMaskPainter extends CustomPainter {
+  const _ReaderMaskPainter({
+    required this.imageSize,
+    required this.rectangles,
+    required this.color,
+    required this.fit,
+    required this.alignment,
+    required this.split,
+    required this.splitInvert,
+    required this.matchTextDirection,
+    required this.textDirection,
+  });
+  final Size imageSize;
+  final List<Rect> rectangles;
+  final Color color;
+  final BoxFit fit;
+  final Alignment alignment;
+  final bool split;
+  final bool splitInvert;
+  final bool matchTextDirection;
+  final TextDirection? textDirection;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final displaySize = split ? splitWideImageDisplaySize(imageSize) : imageSize;
+    final fitted = applyBoxFit(fit, displaySize, size);
+    final destination = alignment.inscribe(fitted.destination, Offset.zero & size);
+    final paint = Paint()..color = color;
+    if (!split) {
+      for (final rect in rectangles) {
+        canvas.drawRect(
+          Rect.fromLTRB(
+            destination.left + rect.left * destination.width,
+            destination.top + rect.top * destination.height,
+            destination.left + rect.right * destination.width,
+            destination.top + rect.bottom * destination.height,
+          ),
+          paint,
+        );
+      }
+      return;
+    }
+    final slices = splitWideImageSlices(
+      invert: splitInvert ^ (matchTextDirection && textDirection == TextDirection.rtl),
+    );
+    for (final rect in rectangles) {
+      for (final slice in slices) {
+        final left = slice.sourceLeft;
+        final right = left + slice.sourceWidth;
+        final clippedLeft = rect.left.clamp(left, right).toDouble();
+        final clippedRight = rect.right.clamp(left, right).toDouble();
+        if (clippedRight <= clippedLeft) continue;
+        canvas.drawRect(
+          Rect.fromLTRB(
+            destination.left + ((clippedLeft - left) / slice.sourceWidth) * destination.width,
+            destination.top + (slice.displayTop + rect.top * slice.displayHeight) * destination.height,
+            destination.left + ((clippedRight - left) / slice.sourceWidth) * destination.width,
+            destination.top + (slice.displayTop + rect.bottom * slice.displayHeight) * destination.height,
+          ),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ReaderMaskPainter old) =>
+      old.imageSize != imageSize ||
+      old.rectangles != rectangles ||
+      old.color != color ||
+      old.fit != fit ||
+      old.alignment != alignment ||
+      old.split != split ||
+      old.splitInvert != splitInvert ||
+      old.matchTextDirection != matchTextDirection ||
+      old.textDirection != textDirection;
 }
 
 class _SplitWideImage extends StatelessWidget {
