@@ -989,6 +989,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
     );
 
     widget = Listener(
+      behavior: HitTestBehavior.translucent,
       onPointerDown: (event) {
         fingers++;
         if (fingers > 1 && !disableScroll) {
@@ -1057,7 +1058,6 @@ class ContinuousModeState extends State<ReaderContinuousView>
           position: photoViewController.position + offset,
         );
       },
-      onPointerSignal: onPointerSignal,
       child: widget,
     );
 
@@ -1128,7 +1128,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
       width *= 1 - percent * 2 / 100;
     }
 
-    return PhotoView.customChild(
+    final readerView = PhotoView.customChild(
       backgroundDecoration: BoxDecoration(color: context.colorScheme.surface),
       childSize: Size(width, height),
       minScale: 1.0,
@@ -1137,6 +1137,14 @@ class ContinuousModeState extends State<ReaderContinuousView>
       controller: photoViewController,
       onScaleUpdate: onScaleUpdate,
       child: SizedBox(width: width, height: height, child: widget),
+    );
+    // Keep wheel handling on the full reader viewport. The image itself can
+    // be narrower than the window, leaving black margins outside PhotoView's
+    // child hit target on desktop.
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerSignal: onPointerSignal,
+      child: readerView,
     );
   }
 

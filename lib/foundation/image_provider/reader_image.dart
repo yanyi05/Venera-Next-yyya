@@ -10,6 +10,7 @@ import 'package:venera_next/network/images.dart';
 import 'package:venera_next/network/image_stream.dart';
 import 'base_image_provider.dart';
 import 'package:venera_next/foundation/appdata.dart';
+import 'package:venera_next/features/reader/baozi_banner_filter.dart';
 
 class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
   /// Image provider for normal image.
@@ -85,19 +86,23 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
       var script = GlobalPreferenceStore(
         appdata.settings,
       ).read(ImageProcessingPreferences.script);
-      if (!script.contains('function processImage')) {
-        return imageBytes;
+      if (script.contains('function processImage')) {
+        imageBytes = await processReaderImageBytes(
+          imageBytes,
+          script: script,
+          comicId: cid,
+          episodeId: eid,
+          page: page,
+          sourceKey: sourceKey,
+          checkStop: checkStop,
+          cancelSignal: BaseImageProvider.cancelSignalOf(checkStop),
+        );
       }
-      imageBytes = await processReaderImageBytes(
-        imageBytes,
-        script: script,
-        comicId: cid,
-        episodeId: eid,
-        page: page,
-        sourceKey: sourceKey,
-        checkStop: checkStop,
-        cancelSignal: BaseImageProvider.cancelSignalOf(checkStop),
-      );
+    }
+    if (!imageKey.startsWith('file://') && isBaoziComicImage(imageKey)) {
+      checkStop();
+      imageBytes = await removeBaoziBanner(imageBytes);
+      checkStop();
     }
     return imageBytes;
   }

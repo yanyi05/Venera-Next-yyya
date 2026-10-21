@@ -40,6 +40,32 @@ import 'source_update_service.dart';
 import 'source_update_prompt.dart';
 import 'source_mutation_failure.dart';
 
+/// Opens a source's existing web login flow from browsing or reader pages.
+/// A successful verification captures the current cookies and source storage.
+Future<void> openSourceWebLogin(BuildContext context, ComicSource source) async {
+  if (source.account?.loginWebsite == null ||
+      !identical(ComicSource.find(source.key), source) ||
+      !NavigationAdmission.allows(context)) {
+    return;
+  }
+  late final CookieJarSql cookieJar;
+  try {
+    cookieJar = await SingleInstanceCookieJar.captureInstance();
+  } catch (error, stack) {
+    Log.error('Source web login', error, stack);
+    if (context.mounted) context.showMessage(message: error.toString());
+    return;
+  }
+  if (!context.mounted ||
+      !NavigationAdmission.allows(context) ||
+      !identical(ComicSource.find(source.key), source)) {
+    return;
+  }
+  await context.to(
+    () => SourceWebLoginPage(source: source, cookieJar: cookieJar),
+  );
+}
+
 class ComicSourcePage extends StatelessWidget {
   const ComicSourcePage({
     super.key,
@@ -1278,7 +1304,7 @@ class _LoginPageState extends SettingsSaveState<_LoginPage> {
       return;
     }
     await context.to(
-      () => _SourceWebLoginPage(source: target, cookieJar: cookieJar!),
+      () => SourceWebLoginPage(source: target, cookieJar: cookieJar!),
     );
     if (mounted &&
         target.isLogged &&
@@ -1288,15 +1314,15 @@ class _LoginPageState extends SettingsSaveState<_LoginPage> {
   }
 }
 
-class _SourceWebLoginPage extends StatefulWidget {
-  const _SourceWebLoginPage({required this.source, required this.cookieJar});
+class SourceWebLoginPage extends StatefulWidget {
+  const SourceWebLoginPage({required this.source, required this.cookieJar});
   final ComicSource source;
   final CookieJarSql cookieJar;
   @override
-  State<_SourceWebLoginPage> createState() => _SourceWebLoginPageState();
+  State<SourceWebLoginPage> createState() => _SourceWebLoginPageState();
 }
 
-class _SourceWebLoginPageState extends SettingsSaveState<_SourceWebLoginPage> {
+class _SourceWebLoginPageState extends SettingsSaveState<SourceWebLoginPage> {
   late String url = widget.source.account!.loginWebsite!;
   String title = '';
   DesktopWebview? _desktop;

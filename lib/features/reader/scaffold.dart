@@ -38,6 +38,9 @@ import 'package:venera_next/features/reader/image_position.dart';
 import 'package:venera_next/features/reader/image_read.dart';
 import 'package:venera_next/features/reader/reader_image_masks.dart';
 import 'package:venera_next/features/reader/reader_image_mask_editor.dart';
+import 'package:venera_next/features/comic_source/source.dart';
+import 'package:venera_next/features/comic_source/comic_source_page.dart'
+    show openSourceWebLogin;
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/routing/settings.dart';
@@ -438,6 +441,7 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     final progress = widget.progress;
     final toggleAutomaticReading = widget.onToggleAutomaticReading;
     final work = widget.imageWork;
+    final source = ComicSource.find(widget.data.sourceKey);
     final displayPage = progress.page.clamp(1, progress.maxPage);
     var text = "E${progress.chapter} : P$displayPage";
     if (!widget.data.hasChapters) {
@@ -488,6 +492,10 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
       onShare: share,
       onEditImageMask: editImageMask,
       onRevalidateImage: revalidateCurrentImage,
+      onVerifySourceCookie:
+          source == null || source.account?.loginWebsite == null
+          ? null
+          : () => unawaited(openSourceWebLogin(context, source)),
     );
 
     return ReaderBottomBar(

@@ -35,6 +35,7 @@ List<Widget> buildReaderBottomActions(
   required VoidCallback onShare,
   VoidCallback? onEditImageMask,
   VoidCallback? onRevalidateImage,
+  VoidCallback? onVerifySourceCookie,
 }) {
   return [
     Semantics(
@@ -152,6 +153,14 @@ List<Widget> buildReaderBottomActions(
         child: IconButton(
           icon: const Icon(Icons.refresh),
           onPressed: onRevalidateImage,
+        ),
+      ),
+    if (onVerifySourceCookie != null)
+      Tooltip(
+        message: 'Verify source cookies'.tl,
+        child: IconButton(
+          icon: const Icon(Icons.language),
+          onPressed: onVerifySourceCookie,
         ),
       ),
     Tooltip(
