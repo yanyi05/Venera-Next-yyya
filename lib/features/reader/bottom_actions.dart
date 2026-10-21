@@ -33,6 +33,8 @@ List<Widget> buildReaderBottomActions(
   VoidCallback? onChapters,
   required VoidCallback onSave,
   required VoidCallback onShare,
+  VoidCallback? onEditImageMask,
+  VoidCallback? onRevalidateImage,
 }) {
   return [
     Semantics(
@@ -134,6 +136,22 @@ List<Widget> buildReaderBottomActions(
         child: IconButton(
           icon: const Icon(Icons.library_books),
           onPressed: onChapters,
+        ),
+      ),
+    if (onEditImageMask != null)
+      Tooltip(
+        message: 'Mask image area'.tl,
+        child: IconButton(
+          icon: const Icon(Icons.crop_free),
+          onPressed: onEditImageMask,
+        ),
+      ),
+    if (onRevalidateImage != null)
+      Tooltip(
+        message: 'Reload image from source'.tl,
+        child: IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: onRevalidateImage,
         ),
       ),
     Tooltip(

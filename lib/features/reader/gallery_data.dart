@@ -19,6 +19,7 @@ class ReaderGalleryData {
     required this.sourceKey,
     required this.comicId,
     required this.chapterId,
+    this.imageRefreshRevision = 0,
     this.showImageDimensions = false,
     this.observeImageReadiness = false,
   });
@@ -37,6 +38,7 @@ class ReaderGalleryData {
   final String? sourceKey;
   final String comicId;
   final String chapterId;
+  final int imageRefreshRevision;
   final bool showImageDimensions;
   final bool observeImageReadiness;
 

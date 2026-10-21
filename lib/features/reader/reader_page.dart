@@ -44,6 +44,7 @@ import 'package:venera_next/features/reader/scaffold.dart';
 import 'shell_host.dart';
 import 'progress_navigation.dart';
 import 'image_picker.dart';
+import 'image_position.dart';
 import 'package:venera_next/features/reader/volume.dart';
 import 'package:venera_next/features/reader/volume_controller.dart';
 import 'package:venera_next/features/reader/window_controller.dart';
@@ -54,6 +55,8 @@ import 'package:venera_next/foundation/reader_settings.dart';
 import 'package:venera_next/foundation/reader_preferences.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/foundation/comic_layout.dart';
+import 'package:venera_next/foundation/cache_manager.dart';
+import 'package:venera_next/foundation/image_provider/reader_image.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:window_manager/window_manager.dart';
@@ -137,7 +140,35 @@ class ReaderState extends State<Reader>
   late final imageFavorites = HistoryScope.readImages(context);
   final _targetValidity = ValueNotifier(0);
   final _shellChanges = ValueNotifier(0);
+  final _imageRefreshChanges = ValueNotifier(0);
   Listenable get shellChanges => _shellChanges;
+  Listenable get imageRefreshChanges => _imageRefreshChanges;
+  int get imageRefreshRevision => _imageRefreshChanges.value;
+
+  Future<void> revalidateReaderImage(ReaderImageAddress address) async {
+    if (!mounted ||
+        _stateDisposed ||
+        address.comicId != cid ||
+        address.sourceKey != type.sourceKey) {
+      throw StateError('The selected image is no longer current');
+    }
+    await CacheManager().delete(address.cacheKey);
+    for (final resize in [false, true]) {
+      PaintingBinding.instance.imageCache.evict(
+        ReaderImageProvider(
+          address.imageKey,
+          address.sourceKey,
+          address.comicId,
+          address.chapterId,
+          1,
+          enableResize: resize,
+          reloadRevision: imageRefreshRevision,
+        ),
+      );
+    }
+    if (!mounted || _stateDisposed) return;
+    _imageRefreshChanges.value++;
+  }
 
   void updateShell() {
     if (!_stateDisposed && mounted) _shellChanges.value++;
@@ -1815,6 +1846,7 @@ class ReaderState extends State<Reader>
     disposeReaderWindow();
     _targetValidity.dispose();
     _shellChanges.dispose();
+    _imageRefreshChanges.dispose();
     super.dispose();
   }
 

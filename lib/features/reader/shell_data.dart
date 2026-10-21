@@ -6,6 +6,7 @@ class ReaderShellData {
   const ReaderShellData({
     required this.comicId,
     required this.sourceKey,
+    required this.chapterId,
     required this.title,
     required this.chapterTitle,
     required this.hasChapters,
@@ -17,7 +18,7 @@ class ReaderShellData {
     required this.preferences,
     required this.automaticReading,
   });
-  final String comicId, sourceKey, title;
+  final String comicId, sourceKey, chapterId, title;
   final String? chapterTitle;
   final bool hasChapters, vertical, gallery, animating, onCommentsPage;
   final bool swipeToCollect;

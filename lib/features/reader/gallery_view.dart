@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_view/photo_view.dart';
-import 'package:venera_next/components/loading.dart';
 import 'package:venera_next/features/reader/image_downloads.dart';
 import 'package:venera_next/features/reader/image_precache.dart';
 import 'package:venera_next/foundation/image_work.dart';
@@ -78,6 +77,7 @@ class GalleryModeState extends State<ReaderGalleryView>
     data.comicId,
     data.chapterId,
     page,
+    reloadRevision: data.imageRefreshRevision,
   );
 
   ReaderDisplayImageProvider _displayImage(String key) =>
@@ -366,20 +366,27 @@ class GalleryModeState extends State<ReaderGalleryView>
       },
       builder: (context, controller) {
         if (data.layout.imagesPerPage == 1 || images.length == 1) {
-          final image = _displayImage(data.images[images[0]]);
-          Widget photo([VoidCallback? reload]) => PhotoView(
+          final imageIndex = images[0];
+          final image = _displayImage(data.images[imageIndex]);
+          final address = ReaderImageAddress(
+            imageKey: data.images[imageIndex],
+            sourceKey: data.sourceKey,
+            comicId: data.comicId,
+            chapterId: data.chapterId,
+          );
+          Widget photo([VoidCallback? _]) => PhotoView.customChild(
             backgroundDecoration: decoration,
             filterQuality: FilterQuality.medium,
             controller: controller,
-            imageProvider: image,
-            fit: BoxFit.contain,
-            loadingBuilder: _buildLoading,
-            errorBuilder: (_, error, stack, retry) => NetworkError(
-              message: error.toString(),
-              retry: () {
-                retry();
-                reload?.call();
-              },
+            childSize: MediaQuery.sizeOf(context),
+            minScale: PhotoViewComputedScale.contained * 1.0,
+            maxScale: PhotoViewComputedScale.covered * 10.0,
+            child: ComicImage(
+              width: double.infinity,
+              height: double.infinity,
+              image: image,
+              fit: BoxFit.contain,
+              maskAddress: address,
             ),
           );
           return data.showImageDimensions || data.observeImageReadiness
@@ -410,28 +417,6 @@ class GalleryModeState extends State<ReaderGalleryView>
     );
   }
 
-  Widget _buildLoading(BuildContext context, ImageChunkEvent? event) {
-    return PhotoView.customChild(
-      childSize: MediaQuery.of(context).size,
-      initialScale: PhotoViewComputedScale.contained,
-      minScale: PhotoViewComputedScale.contained * 1.0,
-      maxScale: PhotoViewComputedScale.covered * 10.0,
-      backgroundDecoration: BoxDecoration(color: context.colorScheme.surface),
-      child: Center(
-        child: SizedBox(
-          width: 20.0,
-          height: 20.0,
-          child: CircularProgressIndicator(
-            backgroundColor: context.colorScheme.surfaceContainerHigh,
-            value: event == null || event.expectedTotalBytes == null
-                ? null
-                : event.cumulativeBytesLoaded / event.expectedTotalBytes!,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget buildPageImages(List<int> images) {
     Axis axis = (data.vertical) ? Axis.vertical : Axis.horizontal;
 
@@ -449,6 +434,12 @@ class GalleryModeState extends State<ReaderGalleryView>
             width: double.infinity,
             height: double.infinity,
             image: _displayImage(data.images[images[0]]),
+            maskAddress: ReaderImageAddress(
+              imageKey: data.images[images[0]],
+              sourceKey: data.sourceKey,
+              comicId: data.comicId,
+              chapterId: data.chapterId,
+            ),
             showImageDimensions: data.showImageDimensions,
             fit: BoxFit.contain,
             alignment: axis == Axis.vertical
@@ -463,6 +454,12 @@ class GalleryModeState extends State<ReaderGalleryView>
             width: double.infinity,
             height: double.infinity,
             image: _displayImage(data.images[images[1]]),
+            maskAddress: ReaderImageAddress(
+              imageKey: data.images[images[1]],
+              sourceKey: data.sourceKey,
+              comicId: data.comicId,
+              chapterId: data.chapterId,
+            ),
             showImageDimensions: data.showImageDimensions,
             fit: BoxFit.contain,
             alignment: axis == Axis.vertical
@@ -479,6 +476,12 @@ class GalleryModeState extends State<ReaderGalleryView>
         return Expanded(
           child: ComicImage(
             image: imageProvider,
+            maskAddress: ReaderImageAddress(
+              imageKey: data.images[imageIndex],
+              sourceKey: data.sourceKey,
+              comicId: data.comicId,
+              chapterId: data.chapterId,
+            ),
             showImageDimensions: data.showImageDimensions,
             fit: BoxFit.contain,
             onInit: (state) => imageStates[state] = imageIndex,

@@ -20,6 +20,7 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
     this.eid,
     this.page, {
     this.enableResize = false,
+    this.reloadRevision = 0,
   });
 
   final String imageKey;
@@ -31,6 +32,7 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
   final String eid;
 
   final int page;
+  final int reloadRevision;
 
   @override
   final bool enableResize;
@@ -106,5 +108,6 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
   }
 
   @override
-  String get key => "$imageKey@$sourceKey@$cid@$eid@$enableResize";
+  String get key =>
+      "$imageKey@$sourceKey@$cid@$eid@$enableResize@$reloadRevision";
 }

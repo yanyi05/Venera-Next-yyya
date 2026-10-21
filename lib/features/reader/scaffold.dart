@@ -34,6 +34,10 @@ import 'package:venera_next/features/reader/settings_effects.dart';
 import 'package:venera_next/features/reader/settings_panel.dart';
 import 'package:venera_next/features/reader/image_selection.dart';
 import 'package:venera_next/features/reader/image_picker.dart';
+import 'package:venera_next/features/reader/image_position.dart';
+import 'package:venera_next/features/reader/image_read.dart';
+import 'package:venera_next/features/reader/reader_image_masks.dart';
+import 'package:venera_next/features/reader/reader_image_mask_editor.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/routing/settings.dart';
@@ -57,6 +61,7 @@ class ReaderScaffold extends StatefulWidget {
     required this.createFavoriteQuery,
     required this.createImageFavorite,
     required this.createImageExport,
+    required this.revalidateImage,
     required this.createSettings,
     required this.createChapterComments,
     required this.chapterNavigation,
@@ -79,6 +84,7 @@ class ReaderScaffold extends StatefulWidget {
   final ReaderImageFavoriteQuery? Function() createFavoriteQuery;
   final ReaderImageFavoriteRequest? Function() createImageFavorite;
   final ReaderImageExportRequest? Function() createImageExport;
+  final Future<void> Function(ReaderImageAddress address) revalidateImage;
   final ReaderSettingsRequest? Function() createSettings;
   final ReaderChapterCommentsRequest? Function() createChapterComments;
   final ReaderChapterNavigationAction? chapterNavigation;
@@ -362,6 +368,66 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
         : null;
   }
 
+  Future<ReaderImageAddress?> _pickImageAddress() async {
+    final selection = await _imagePicker.pick();
+    if (selection == null ||
+        !selection.isCurrent(widget.readImagePickContext())) {
+      return null;
+    }
+    return ReaderImageAddress(
+      imageKey: selection.context.images[selection.index],
+      sourceKey: widget.data.sourceKey,
+      comicId: widget.data.comicId,
+      chapterId: widget.data.chapterId,
+    );
+  }
+
+  Future<void> editImageMask() async {
+    final address = await _pickImageAddress();
+    if (!mounted || address == null) return;
+    try {
+      final bytes = await readReaderImageBytes(address);
+      if (!mounted || bytes == null) {
+        showToast(message: 'Image is not available in cache'.tl, context: context);
+        return;
+      }
+      final result = await showDialog<ReaderImageMaskEdit>(
+        context: context,
+        builder: (_) => ReaderImageMaskEditor(
+          bytes: bytes,
+          initial: ReaderImageMasks.read(address),
+          initialColor: ReaderImageMasks.readColor(address),
+        ),
+      );
+      if (!mounted || result == null) return;
+      await ReaderImageMasks.write(
+        address,
+        result.rectangles,
+        result.color,
+      );
+      if (mounted) {
+        showToast(message: 'Image mask saved'.tl, context: context, seconds: 1);
+      }
+    } catch (error, stack) {
+      Log.error('Reader image mask', error, stack);
+      if (mounted) showToast(message: error.toString(), context: context);
+    }
+  }
+
+  Future<void> revalidateCurrentImage() async {
+    final address = await _pickImageAddress();
+    if (!mounted || address == null) return;
+    try {
+      await widget.revalidateImage(address);
+      if (mounted) {
+        showToast(message: 'Image reloaded from source'.tl, context: context, seconds: 1);
+      }
+    } catch (error, stack) {
+      Log.error('Reader image reload', error, stack);
+      if (mounted) showToast(message: error.toString(), context: context);
+    }
+  }
+
   Widget buildBottom() {
     _favorites.bind(widget.createFavoriteQuery());
     return _buildBottom();
@@ -420,6 +486,8 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
       onChapters: widget.data.hasChapters ? openChapterDrawer : null,
       onSave: saveCurrentImage,
       onShare: share,
+      onEditImageMask: editImageMask,
+      onRevalidateImage: revalidateCurrentImage,
     );
 
     return ReaderBottomBar(
