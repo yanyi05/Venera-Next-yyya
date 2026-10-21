@@ -266,6 +266,7 @@ class ComicList extends StatefulWidget {
     this.leadingSliver,
     this.trailingSliver,
     this.errorLeading,
+    this.errorAction,
     this.menuBuilder,
     this.controller,
     this.refreshHandlerCallback,
@@ -283,6 +284,8 @@ class ComicList extends StatefulWidget {
   final Widget? trailingSliver;
 
   final Widget? errorLeading;
+
+  final Widget? errorAction;
 
   final List<MenuEntry> Function(Comic)? menuBuilder;
 
@@ -616,6 +619,7 @@ class ComicListState extends State<ComicList> {
             child: NetworkError(
               withAppbar: false,
               message: _error!,
+              action: widget.errorAction,
               retry: () {
                 setState(() {
                   _error = null;
@@ -663,6 +667,7 @@ class ComicListState extends State<ComicList> {
             child: NetworkError(
               withAppbar: false,
               message: _error!,
+              action: widget.errorAction,
               retry: () {
                 setState(() {
                   _error = null;
@@ -710,15 +715,22 @@ class ComicListState extends State<ComicList> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Center(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      setState(() {
-                        _error = null;
-                      });
-                    },
-                    child: Text("Retry".tl),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (widget.errorAction != null) ...[
+                      widget.errorAction!,
+                      const SizedBox(width: 8),
+                    ],
+                    OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          _error = null;
+                        });
+                      },
+                      child: Text("Retry".tl),
+                    ),
+                  ],
                 ),
               ],
             ).paddingHorizontal(16).paddingVertical(8),

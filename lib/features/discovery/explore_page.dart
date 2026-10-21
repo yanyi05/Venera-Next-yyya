@@ -14,6 +14,8 @@ import 'package:venera_next/routing/app_navigation.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/features/comic_source/comic_source.dart';
+import 'package:venera_next/features/comic_source/comic_source_page.dart'
+    show openSourceWebLogin;
 import 'package:venera_next/foundation/global_state.dart';
 import 'package:venera_next/foundation/res.dart';
 import 'package:venera_next/routing/page_jump_target.dart';
@@ -279,6 +281,16 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
     }
   }
 
+  Widget? buildSourceLoginAction() {
+    final source = ComicSource.find(comicSourceKey);
+    if (source == null || source.account?.loginWebsite == null) return null;
+    return TextButton.icon(
+      onPressed: () => unawaited(openSourceWebLogin(context, source)),
+      icon: const Icon(Icons.language),
+      label: Text('Login'.tl),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -306,12 +318,14 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final sourceLoginAction = buildSourceLoginAction();
     if (data.loadMultiPart != null) {
       return _MultiPartExplorePage(
         key: const PageStorageKey("comic_list"),
         data: data,
         controller: scrollController,
         comicSourceKey: comicSourceKey,
+        errorAction: sourceLoginAction,
         refreshHandlerCallback: (c) {
           refreshHandler = c;
         },
@@ -321,6 +335,7 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
         enablePageStorage: true,
         loadPage: data.loadPage,
         loadNext: data.loadNext,
+        errorAction: sourceLoginAction,
         key: const PageStorageKey("comic_list"),
         controller: scrollController,
         refreshHandlerCallback: (c) {
@@ -505,6 +520,7 @@ class _MultiPartExplorePage extends StatefulWidget {
     required this.data,
     required this.controller,
     required this.comicSourceKey,
+    this.errorAction,
     required this.refreshHandlerCallback,
   });
 
@@ -513,6 +529,8 @@ class _MultiPartExplorePage extends StatefulWidget {
   final ScrollController controller;
 
   final String comicSourceKey;
+
+  final Widget? errorAction;
 
   final void Function(VoidCallback c) refreshHandlerCallback;
 
@@ -591,6 +609,7 @@ class _MultiPartExplorePageState extends State<_MultiPartExplorePage> {
     } else if (message != null) {
       return NetworkError(
         message: message!,
+        action: widget.errorAction,
         retry: () {
           setState(() {
             loading = true;

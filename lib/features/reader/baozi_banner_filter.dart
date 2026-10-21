@@ -99,10 +99,10 @@ bool _hasBaoziLogoAndText(img.Image image, int top, int bottom, int step) {
       final p = image.getPixel(x, y);
       if (x > width * 0.36 &&
           x < width * 0.56 &&
-          p.r > 175 &&
-          p.g > 125 &&
-          p.b < 115 &&
-          p.r > p.g * 1.15) {
+          p.r > 160 &&
+          p.g > 100 &&
+          p.b < 150 &&
+          p.r > p.g * 1.03) {
         yellow++;
         if (x < minYellowX) minYellowX = x;
         if (x > maxYellowX) maxYellowX = x;
