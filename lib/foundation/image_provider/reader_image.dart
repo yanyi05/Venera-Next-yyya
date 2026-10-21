@@ -99,7 +99,8 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
         );
       }
     }
-    if (!imageKey.startsWith('file://') && isBaoziComicImage(imageKey)) {
+    if (!imageKey.startsWith('file://') &&
+    (sourceKey == 'baozi' || isBaoziComicImage(imageKey))) {
       checkStop();
       imageBytes = await removeBaoziBanner(imageBytes);
       checkStop();
