@@ -12,6 +12,7 @@ import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/features/history/history_manager.dart';
 import 'package:venera_next/features/history/image_favorites.dart';
 import 'record_data_sync.dart';
+import 'package:venera_next/foundation/reading_activity.dart';
 
 /// Construction is inert. The application owns start/stop/dispose.
 DataSyncController createApplicationDataSync({
@@ -28,7 +29,8 @@ DataSyncController createApplicationDataSync({
   final defaultTransfer = !useV117WebDav && transfer == null
       ? createDataSyncTransfer(importRecovery: recovery)
       : null;
-  return DataSyncController(
+  late final DataSyncController controller;
+  controller = DataSyncController(
     useV117WebDav: useV117WebDav,
     reliableAutomaticSync: useV117WebDav,
     preferences: createAppSyncPreferences(appdata),
@@ -41,26 +43,36 @@ DataSyncController createApplicationDataSync({
     ownership: SqliteDataSyncOwnership(() => App.dataPath),
     saveSettings: () => appdata.saveData(false),
     persistImplicit: appdata.writeImplicitData,
-    observeChanges: _observeApplicationChanges,
+    observeChanges: (changed) =>
+        _observeApplicationChanges(changed, controller.setReadingActive),
   );
+  return controller;
 }
 
-void Function() _observeApplicationChanges(void Function() changed) {
+void Function() _observeApplicationChanges(
+  void Function() changed,
+  void Function(bool) setReadingActive,
+) {
   final favorites = LocalFavoritesManager();
   final sources = ComicSourceManager();
   final history = HistoryManager();
   final images = ImageFavoriteManager();
+  final reading = ReadingActivity.instance;
+  void readingChanged() => setReadingActive(reading.isReading);
   favorites.addListener(changed);
   try {
     sources.addListener(changed);
     history.addListener(changed);
     images.addListener(changed);
     appdata.registerSyncDataRequestHandler(changed);
+    reading.addListener(readingChanged);
+    readingChanged();
   } catch (_) {
     favorites.removeListener(changed);
     sources.removeListener(changed);
     history.removeListener(changed);
     images.removeListener(changed);
+    reading.removeListener(readingChanged);
     rethrow;
   }
   return () {
@@ -69,5 +81,6 @@ void Function() _observeApplicationChanges(void Function() changed) {
     sources.removeListener(changed);
     history.removeListener(changed);
     images.removeListener(changed);
+    reading.removeListener(readingChanged);
   };
 }

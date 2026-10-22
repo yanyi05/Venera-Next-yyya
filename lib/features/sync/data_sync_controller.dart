@@ -120,6 +120,23 @@ class DataSyncController with ChangeNotifier {
   final bool _reliableAutomaticSync;
   int _automaticFailures = 0;
   bool _changeScheduled = false;
+  bool _readingActive = false;
+
+  /// Stop background admission immediately. The reader releases this only after
+  /// its final progress save. An already-started atomic import is allowed to finish.
+  void setReadingActive(bool active) {
+    if (_disposed || _readingActive == active) return;
+    _readingActive = active;
+    if (active) {
+      _scheduleTimer?.cancel();
+      _scheduleTimer = null;
+      _changeScheduled = false;
+      _transferScope?.cancel();
+    } else {
+      _scheduleReliable(const Duration(seconds: 2), changed: hasPendingChanges);
+    }
+  }
+
   bool _ownershipReady = false;
   bool _ownershipReleased = false;
   bool _disposalDrained = false;
@@ -201,6 +218,12 @@ class DataSyncController with ChangeNotifier {
     if (_disposed || _publishingImported) return;
     _changeGeneration++;
     if (!hasConfiguration) return;
+    if (_readingActive && _reliableAutomaticSync) {
+      // Progress itself is already durable in history.db. Startup captures it
+      // before any merge, even if the OS kills us before this flag is persisted.
+      _syncPreferences.pending = true;
+      return;
+    }
     if (!_tryOwnership()) return;
     if (!hasPendingChanges) {
       _syncPreferences.pending = true;
@@ -228,7 +251,7 @@ class DataSyncController with ChangeNotifier {
       if (_content == null) {
         if (_reliableAutomaticSync) {
           if (!_changeScheduled && _activeTask == null) {
-            _scheduleReliable(const Duration(seconds: 5), changed: true);
+            _scheduleReliable(const Duration(seconds: 10), changed: true);
           }
         } else {
           unawaited(uploadData());
@@ -269,6 +292,7 @@ class DataSyncController with ChangeNotifier {
     _scheduleTimer?.cancel();
     _scheduleTimer = null;
     _changeScheduled = false;
+    if (_readingActive) return;
     if (_hasRecovery && !_recoveryInitialized) {
       if (_started && !_disposed && !_exitHeld && !_automaticRecoveryWait) {
         _automaticRecoveryWait = true;
@@ -337,7 +361,12 @@ class DataSyncController with ChangeNotifier {
   }
 
   void _scheduleReliable(Duration delay, {bool changed = false}) {
-    if (!_started || _disposed || _exitHeld || _configuring || !isEnabled) {
+    if (!_started ||
+        _disposed ||
+        _exitHeld ||
+        _configuring ||
+        _readingActive ||
+        !isEnabled) {
       return;
     }
     _scheduleTimer?.cancel();
@@ -573,7 +602,7 @@ class DataSyncController with ChangeNotifier {
           _lastError = result.errorMessage;
           _lastRealtimeCheck = _now;
           if (_reliableAutomaticSync) {
-            _scheduleReliable(const Duration(seconds: 5));
+            _scheduleReliable(const Duration(seconds: 10));
           } else if (currentMode == DataSyncMode.scheduled) {
             checkForAutomaticSync();
           }
@@ -1218,6 +1247,9 @@ class DataSyncController with ChangeNotifier {
     if (_disposed) {
       return Future.value(const Res.error('Sync service is disposed'));
     }
+    if (_readingActive) {
+      return Future.value(const Res.error('Sync is paused while reading'));
+    }
     if (_recoveryGuard() case final failure?) {
       return Future.value(Res.failure(failure));
     }
@@ -1239,7 +1271,7 @@ class DataSyncController with ChangeNotifier {
                           .clamp(5, 300),
                     )
                   : hasPendingChanges
-                  ? const Duration(seconds: 5)
+                  ? const Duration(seconds: 10)
                   : currentMode == DataSyncMode.realtime
                   ? const Duration(seconds: 60)
                   : Duration(minutes: currentIntervalMinutes);
@@ -1697,6 +1729,7 @@ class DataSyncController with ChangeNotifier {
   }
 
   Future<Res<bool>> _uploadNow() async {
+    if (_readingActive) return const Res.error('Sync is paused while reading');
     var config = _validateConfig();
     if (config == null) {
       _lastError = 'Invalid WebDAV configuration';
@@ -1739,6 +1772,7 @@ class DataSyncController with ChangeNotifier {
   }
 
   Future<Res<bool>> _downloadNow({bool force = false}) async {
+    if (_readingActive) return const Res.error('Sync is paused while reading');
     var config = _validateConfig();
     if (config == null) {
       _lastError = 'Invalid WebDAV configuration';

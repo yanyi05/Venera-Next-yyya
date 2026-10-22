@@ -51,6 +51,7 @@ import 'package:venera_next/features/reader/volume_controller.dart';
 import 'package:venera_next/features/reader/window_controller.dart';
 import 'package:venera_next/features/reader/platform_effects.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/reader_settings.dart';
 import 'package:venera_next/foundation/reader_preferences.dart';
@@ -137,6 +138,7 @@ class Reader extends StatefulWidget {
 
 class ReaderState extends State<Reader>
     with ReaderImagePerPageHandler, WidgetsBindingObserver {
+  VoidCallback? _releaseSyncReading;
   final imageWork = ImageWork();
   late final imageFavorites = HistoryScope.readImages(context);
   final _targetValidity = ValueNotifier(0);
@@ -1365,6 +1367,7 @@ class ReaderState extends State<Reader>
 
   @override
   void initState() {
+    _releaseSyncReading = ReadingActivity.instance.enter();
     page = widget.initialPage ?? 1;
     if (page < 1) {
       page = 1;
@@ -1866,7 +1869,19 @@ class ReaderState extends State<Reader>
     _layoutAttempt?.task.cancel();
     _layoutAttempt = null;
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(_closeSession());
+    final releaseSyncReading = _releaseSyncReading;
+    _releaseSyncReading = null;
+    unawaited(
+      _closeSession().then<void>(
+        (_) {
+          releaseSyncReading?.call();
+        },
+        onError: (Object error, StackTrace stack) {
+          releaseSyncReading?.call();
+          Log.error('Reader close', error, stack);
+        },
+      ),
+    );
     autoReading.dispose();
     focusNode.dispose();
     _platformEffects?.dispose();

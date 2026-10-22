@@ -32,7 +32,33 @@ void main() {
   });
 
   test(
-    'continuous page changes upload within five seconds, without one request per page',
+    'reading holds sync until final local progress is saved and the lease is released',
+    () async {
+      var uploads = 0;
+      var downloads = 0;
+      f.transfer.onUpload = () async {
+        uploads++;
+        return const Res(true);
+      };
+      f.transfer.onDownload = () async {
+        downloads++;
+        return const Res(false);
+      };
+      final sync = f.controller
+        ..setReadingActive(true)
+        ..start();
+      sync.onDataChanged();
+      await clock.elapse(const Duration(minutes: 2));
+      expect(uploads + downloads, 0);
+      expect(sync.hasPendingChanges, isTrue);
+      sync.setReadingActive(false);
+      await clock.elapse(const Duration(seconds: 2));
+      expect(uploads, 1);
+    },
+  );
+
+  test(
+    'continuous page changes upload within ten seconds, without one request per page',
     () async {
       var uploads = 0;
       f.transfer.onUpload = () async {
@@ -41,7 +67,7 @@ void main() {
       };
       final sync = f.controller..start();
       await clock.elapse(Duration.zero);
-      for (var second = 0; second < 5; second++) {
+      for (var second = 0; second < 10; second++) {
         for (var page = 0; page < 10; page++) {
           sync.onDataChanged();
         }
@@ -83,13 +109,13 @@ void main() {
       final sync = f.controller..start();
       await clock.elapse(Duration.zero);
       sync.onDataChanged();
-      await clock.elapse(const Duration(seconds: 5));
+      await clock.elapse(const Duration(seconds: 10));
       expect(uploads, 1);
       sync.onDataChanged();
       gate.complete(const Res(true));
       await clock.elapse(Duration.zero);
       expect(sync.hasPendingChanges, isTrue);
-      await clock.elapse(const Duration(seconds: 5));
+      await clock.elapse(const Duration(seconds: 10));
       expect(uploads, 2);
       expect(sync.hasPendingChanges, isFalse);
     },
