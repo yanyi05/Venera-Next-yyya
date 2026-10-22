@@ -18,6 +18,7 @@ import 'package:venera_next/features/comic_source/comic_source_api.dart';
 import 'package:venera_next/features/favorites/favorites_api.dart';
 import 'package:venera_next/features/favorites/read_later.dart';
 import 'package:venera_next/features/history/history_api.dart';
+import 'package:venera_next/features/history/history_scope.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/features/local_comics/download.dart';
 import 'package:venera_next/features/reader/reader.dart';
@@ -339,16 +340,43 @@ abstract mixin class ComicPageActions {
             }
           }
         }
+        final historyStore = HistoryScope.read(owner);
+        final historyGeneration = historyStore.connectionGeneration;
+        NextChapterDownloadPlan? nextTen() {
+          if (!owner.mounted ||
+              !admission.active ||
+              !isComicActive(target) ||
+              !historyStore.isInitialized ||
+              historyStore.connectionGeneration != historyGeneration ||
+              !identical(HistoryScope.read(owner), historyStore)) {
+            return null;
+          }
+          return NextChapterDownloadPlan.fromHistory(
+            chapters: target.chapters!,
+            history: historyStore.find(target.id, target.comicType),
+            downloadedIds:
+                library
+                    .find(target.id, target.comicType)
+                    ?.downloadedChapters
+                    .toSet() ??
+                <String>{},
+          );
+        }
+
         final selected = await showSideBar<List<int>>(
           owner,
           _SelectDownloadChapter(
             chapterTitles,
             List<int>.unmodifiable(downloaded),
+            nextTen: nextTen,
             isCurrent: () =>
                 owner.mounted && admission.active && isComicActive(target),
           ),
         );
-        if (!owner.mounted || !canContinue() || selected == null) {
+        if (!owner.mounted ||
+            !canContinue() ||
+            selected == null ||
+            selected.isEmpty) {
           return;
         }
         if (library.isDownloading(target.id, target.comicType)) return;
@@ -480,8 +508,10 @@ class _SelectDownloadChapter extends StatefulWidget {
     this.eps,
     this.downloadedEps, {
     required this.isCurrent,
+    required this.nextTen,
   });
 
+  final NextChapterDownloadPlan? Function() nextTen;
   final List<String> eps;
   final List<int> downloadedEps;
   final bool Function() isCurrent;
@@ -540,6 +570,7 @@ class _SelectDownloadChapterState extends State<_SelectDownloadChapter> {
     final active = _canSelect(generation);
     final eps = widget.eps;
     final downloaded = widget.downloadedEps;
+    final plan = widget.nextTen();
     return Scaffold(
       appBar: Appbar(
         title: Text("Download".tl),
@@ -548,6 +579,43 @@ class _SelectDownloadChapterState extends State<_SelectDownloadChapter> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.download),
+                  label: Text('Download next 10 chapters'.tl),
+                  onPressed: !active || plan == null || plan.indices.isEmpty
+                      ? null
+                      : () {
+                          if (!_canSelect(generation)) return;
+                          // Re-read saved progress and downloads at the click,
+                          // including changes made while this sheet was open.
+                          final latest = widget.nextTen();
+                          if (latest == null || latest.indices.isEmpty) {
+                            setState(() {});
+                            return;
+                          }
+                          _submit(generation, latest.indices);
+                        },
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  plan == null
+                      ? 'Read a chapter first, or select chapters manually.'.tl
+                      : plan.indices.isEmpty
+                      ? 'No remaining chapters to download in the next 10.'.tl
+                      : 'After @chapter: download @count chapters'.tlParams({
+                          'chapter': plan.currentTitle,
+                          'count': plan.indices.length.toString(),
+                        }),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: EdgeInsets.zero,
@@ -615,6 +683,65 @@ class _SelectDownloadChapterState extends State<_SelectDownloadChapter> {
           SizedBox(height: MediaQuery.of(context).padding.bottom),
         ],
       ),
+    );
+  }
+}
+
+/// A manual download window after the last saved position, never the highest
+/// visited chapter or the earliest unread chapter. Indices are zero-based.
+class NextChapterDownloadPlan {
+  const NextChapterDownloadPlan(this.currentTitle, this.indices);
+
+  final String currentTitle;
+  final List<int> indices;
+
+  static NextChapterDownloadPlan? fromHistory({
+    required ComicChapters chapters,
+    required History? history,
+    Set<String> downloadedIds = const {},
+  }) {
+    if (history == null || history.ep < 1 || chapters.length == 0) return null;
+    var group = history.group;
+    var offset = 0;
+    var titles = chapters.titles.toList();
+    if (group != null) {
+      if (!chapters.isGrouped) return null;
+      final groupTitle = history.groupTitle;
+      if (groupTitle != null && groupTitle.isNotEmpty) {
+        final found = chapters.groups.toList().indexOf(groupTitle);
+        if (found < 0) return null;
+        group = found + 1;
+      }
+      if (group < 1 || group > chapters.groupCount) return null;
+      for (var i = 0; i < group - 1; i++) {
+        offset += chapters.getGroupByIndex(i).length;
+      }
+      titles = chapters.getGroupByIndex(group - 1).values.toList();
+    }
+    var current = history.ep - 1;
+    final savedTitle = history.chapterTitle;
+    if (savedTitle != null &&
+        savedTitle.isNotEmpty &&
+        (current >= titles.length || titles[current] != savedTitle)) {
+      // Recover from source list insertions only for an unambiguous exact name.
+      final matches = <int>[
+        for (var i = 0; i < titles.length; i++)
+          if (titles[i] == savedTitle) i,
+      ];
+      if (matches.length != 1) return null;
+      current = matches.single;
+    }
+    if (current >= titles.length) return null;
+    final flat = offset + current;
+    final ids = chapters.ids.toList();
+    final selected = <int>[];
+    final seen = <String>{};
+    for (var i = flat + 1; i < ids.length && i <= flat + 10; i++) {
+      if (!downloadedIds.contains(ids[i]) && seen.add(ids[i])) selected.add(i);
+    }
+    return NextChapterDownloadPlan(
+      titles[current],
+      List.unmodifiable(selected),
     );
   }
 }

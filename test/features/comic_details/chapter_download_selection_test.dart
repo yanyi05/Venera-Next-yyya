@@ -10,9 +10,12 @@ import 'package:venera_next/components/window_selection_task.dart';
 import 'package:venera_next/features/comic_details/actions.dart';
 import 'package:venera_next/features/comic_source/comic_source_api.dart';
 import 'package:venera_next/features/history/history_api.dart';
+import 'package:venera_next/features/history/history_manager.dart';
+import 'package:venera_next/features/history/history_scope.dart';
 import 'package:venera_next/features/local_comics/images_download_task.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/log.dart';
@@ -74,6 +77,16 @@ class _AfterSelection extends NavigatorObserver {
   }
 }
 
+class _LatestHistory extends Fake implements HistoryManager {
+  History? latest;
+  @override
+  bool get isInitialized => true;
+  @override
+  int get connectionGeneration => 0;
+  @override
+  History? find(String id, ComicType type) => latest;
+}
+
 class _Host {
   final navigator = GlobalKey<NavigatorState>();
   final observer = _AfterSelection();
@@ -85,22 +98,27 @@ class _Host {
   bool allowed = true;
   bool failing = false;
 
-  Widget tree() => MaterialApp(
-    builder: (_, _) => SelectionTasksScope(
-      registry: registry,
-      child: NavigationAdmission(
-        allowsNavigation: () => allowed,
-        child: failing
-            ? _FailingPopNavigator(
-                key: navigator,
-                observers: [observer],
-                onGenerateRoute: _home,
-              )
-            : Navigator(
-                key: navigator,
-                observers: [observer],
-                onGenerateRoute: _home,
-              ),
+  final historyStore = _LatestHistory();
+
+  Widget tree() => HistoryScope(
+    manager: historyStore,
+    child: MaterialApp(
+      builder: (_, _) => SelectionTasksScope(
+        registry: registry,
+        child: NavigationAdmission(
+          allowsNavigation: () => allowed,
+          child: failing
+              ? _FailingPopNavigator(
+                  key: navigator,
+                  observers: [observer],
+                  onGenerateRoute: _home,
+                )
+              : Navigator(
+                  key: navigator,
+                  observers: [observer],
+                  onGenerateRoute: _home,
+                ),
+        ),
       ),
     ),
   );
@@ -197,6 +215,51 @@ void main() {
 
     library.addListener(recordPublication);
     addTearDown(() => library.removeListener(recordPublication));
+  });
+
+  testWidgets('next ten re-reads the last exit when clicked', (tester) async {
+    final host = _Host();
+    await host.mount(tester, library);
+    host.historyStore.latest = History.fromModel(
+      model: host.actions.comic,
+      ep: 1,
+      page: 1,
+    );
+    final result = host.actions.download();
+    await pumpSidebar(tester);
+    final callback = tester
+        .widget<OutlinedButton>(
+          find.widgetWithText(OutlinedButton, 'Download next 10 chapters'),
+        )
+        .onPressed!;
+    // Another session exits at chapter two while this selection is open.
+    host.historyStore.latest = History.fromModel(
+      model: host.actions.comic,
+      ep: 2,
+      page: 1,
+      readChapters: {'1', '2', '3'},
+    );
+    callback();
+    await settleSidebarWork(tester, () => result);
+    expect(published.single.chapters, ['bonus']);
+    expect(published.single.isAutomatic, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no reading position disables next ten', (tester) async {
+    final host = _Host();
+    await host.mount(tester, library);
+    host.actions.download().ignore();
+    await pumpSidebar(tester);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Download next 10 chapters'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(published, isEmpty);
   });
 
   for (final built in [false, true]) {

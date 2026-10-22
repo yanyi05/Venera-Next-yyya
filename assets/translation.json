@@ -1,5 +1,10 @@
 {
   "zh_CN": {
+    "Download next 10 chapters": "下载阅读位置之后的 10 章",
+    "Read a chapter first, or select chapters manually.": "请先阅读一章，或手动选择章节。",
+    "No remaining chapters to download in the next 10.": "后续 10 章均已下载，或已到最后一章。",
+    "After @chapter: download @count chapters": "从「@chapter」之后下载 @count 章",
+
     "Website verification": "网站验证",
     "Choose source to verify": "选择要验证的漫画源",
     "No source provides website verification": "此漫画源尚未提供网页验证入口",
