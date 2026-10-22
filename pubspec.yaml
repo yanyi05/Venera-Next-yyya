@@ -65,7 +65,7 @@ dependencies:
       url: https://github.com/CyrilPeng/webdav_client
       ref: 2f669c98fb81cff1c64fee93466a1475c77e4273
   battery_plus: ^7.1.2
-  connectivity_plus: 7.3.1
+  connectivity_plus: 6.1.5
   local_auth: ^3.0.2
   flutter_saf:
     git:
