@@ -1,4 +1,7 @@
 import 'dart:math' as math;
+import 'dart:async';
+import 'package:venera_next/features/comic_source/comic_source_page.dart'
+    show verifyComicSource;
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/keyword_settings_store.dart';
@@ -279,6 +282,13 @@ class ComicTile extends StatelessWidget {
         text: 'Block'.tl,
         onClick: () => block(context),
       ),
+      if (ComicSource.find(comic.sourceKey)?.account?.loginWebsite != null)
+        MenuEntry(
+          icon: Icons.language,
+          text: 'Website verification'.tl,
+          onClick: () =>
+              unawaited(verifyComicSource(context, sourceKey: comic.sourceKey)),
+        ),
       ...?menuOptions,
     ]);
   }

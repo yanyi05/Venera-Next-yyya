@@ -21,10 +21,12 @@ class _RankingPageState extends State<RankingPage> {
   late final CategoryComicsData data;
   late final Map<String, String> options;
   late String optionValue;
+  late String sourceKey;
 
   void findData() {
     for (final source in ComicSource.all()) {
       if (source.categoryData?.key == widget.categoryKey) {
+        sourceKey = source.key;
         data = source.categoryComicsData!;
         options = data.rankingData!.options;
         optionValue = options.keys.first;
@@ -45,7 +47,10 @@ class _RankingPageState extends State<RankingPage> {
     var topPadding = context.padding.top + 56;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: Appbar(title: Text("Ranking".tl)),
+      appBar: Appbar(
+        title: Text("Ranking".tl),
+        actions: [SourceVerificationButton(sourceKey: sourceKey)],
+      ),
       body: ComicList(
         key: Key(optionValue),
         errorLeading: SizedBox(height: topPadding),

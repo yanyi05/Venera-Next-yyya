@@ -212,6 +212,7 @@ class _HistoryPageState extends State<HistoryPage> {
     ];
 
     List<Widget> normalActions = [
+      const SourceVerificationButton(),
       IconButton(
         icon: const Icon(Icons.query_stats),
         tooltip: 'Reading statistics'.tl,

@@ -64,7 +64,10 @@ class _AggregatedSearchPageState extends State<AggregatedSearchPage> {
   Widget build(BuildContext context) {
     return SmoothCustomScrollView(
       slivers: [
-        SliverSearchBar(controller: controller),
+        SliverSearchBar(
+          controller: controller,
+          action: const SourceVerificationButton(),
+        ),
         SliverList(
           key: ValueKey(_keyword),
           delegate: SliverChildBuilderDelegate((context, index) {

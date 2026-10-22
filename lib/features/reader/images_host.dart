@@ -85,7 +85,17 @@ class ReaderImagesHost extends StatelessWidget {
           }
         },
         child: SizedBox.expand(
-          child: NetworkError(message: error, retry: retry),
+          child: NetworkError(
+            message: error,
+            retry: retry,
+            action: SourceVerificationButton(
+              sourceKey: reader.type.sourceKey,
+              label: true,
+              onReturned: () {
+                if (current()) retry();
+              },
+            ),
+          ),
         ),
       ),
       contentBuilder: (context, content) =>

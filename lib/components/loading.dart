@@ -76,6 +76,7 @@ class NetworkError extends StatelessWidget {
             child: Text("Export logs".tl),
           ),
           const SizedBox(height: 8),
+          ?action,
           if (retry != null)
             if (cfe != null)
               FilledButton(
@@ -89,7 +90,6 @@ class NetworkError extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (action != null) action!.paddingRight(8),
                   FilledButton(
                     onPressed: retry,
                     child: Text(buttonText ?? 'Retry'.tl),

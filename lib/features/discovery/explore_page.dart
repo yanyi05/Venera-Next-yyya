@@ -158,10 +158,28 @@ class _ExplorePageState extends State<ExplorePage>
         key: PageStorageKey(pages.toString()),
         tabs: pages.map((e) => buildTab(e)).toList(),
         controller: controller,
-        actionButton: TabActionButton(
-          icon: const Icon(Icons.add),
-          text: "Add".tl,
-          onPressed: addPage,
+        actionButton: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: controller,
+              builder: (context, _) {
+                final source = ComicSource.all()
+                    .where(
+                      (source) => source.explorePages.any(
+                        (page) => page.title == pages[controller.index],
+                      ),
+                    )
+                    .firstOrNull;
+                return SourceVerificationButton(sourceKey: source?.key);
+              },
+            ),
+            TabActionButton(
+              icon: const Icon(Icons.add),
+              text: "Add".tl,
+              onPressed: addPage,
+            ),
+          ],
         ),
       ),
     ).paddingTop(context.padding.top);
@@ -282,10 +300,10 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
   Widget? buildSourceLoginAction() {
     final source = ComicSource.find(comicSourceKey);
     if (source == null || source.account?.loginWebsite == null) return null;
-    return TextButton.icon(
-      onPressed: () => unawaited(openSourceWebLogin(context, source)),
-      icon: const Icon(Icons.language),
-      label: Text('Login'.tl),
+    return SourceVerificationButton(
+      sourceKey: source.key,
+      label: true,
+      onReturned: () => refreshHandler?.call(),
     );
   }
 

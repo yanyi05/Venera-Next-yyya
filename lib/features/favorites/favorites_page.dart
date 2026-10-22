@@ -68,6 +68,10 @@ class _FavoritesPageState extends SettingsSaveState<FavoritesPage> {
       Column(
         children: [
           if (savingSettings || hasSettingsSaveError) settingsSaveStatus,
+          const Align(
+            alignment: Alignment.centerRight,
+            child: SourceVerificationButton(label: true),
+          ),
           Expanded(
             child: IconTheme(
               data: IconThemeData(

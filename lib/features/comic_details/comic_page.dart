@@ -160,7 +160,22 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         },
       );
     }
-    return NetworkError(message: error!, retry: retry, action: action);
+    return NetworkError(
+      message: error!,
+      retry: retry,
+      action: Wrap(
+        spacing: 8,
+        alignment: WrapAlignment.center,
+        children: [
+          SourceVerificationButton(
+            sourceKey: widget.sourceKey,
+            label: true,
+            onReturned: retry,
+          ),
+          ?action,
+        ],
+      ),
+    );
   }
 
   @override
@@ -335,17 +350,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         child: Text(comic.title),
       ),
       actions: [
-        if (ComicSource.find(comic.sourceKey)?.account?.loginWebsite != null)
-          IconButton(
-            tooltip: 'Verify source cookies'.tl,
-            onPressed: () {
-              final source = ComicSource.find(comic.sourceKey);
-              if (source != null) {
-                unawaited(openSourceWebLogin(context, source));
-              }
-            },
-            icon: const Icon(Icons.language),
-          ),
+        SourceVerificationButton(sourceKey: widget.sourceKey),
         IconButton(
           onPressed: showMoreActions,
           icon: const Icon(Icons.more_horiz),

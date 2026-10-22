@@ -172,32 +172,38 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   Widget buildAction() {
-    return Tooltip(
-      message: "Settings".tl,
-      child: IconButton(
-        icon: const Icon(Icons.tune),
-        onPressed: () async {
-          if (suggestionOverlay != null) {
-            suggestionsController.remove();
-          }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SourceVerificationButton(sourceKey: sourceKey),
+        Tooltip(
+          message: "Settings".tl,
+          child: IconButton(
+            icon: const Icon(Icons.tune),
+            onPressed: () async {
+              if (suggestionOverlay != null) {
+                suggestionsController.remove();
+              }
 
-          var previousOptions = List<String>.from(options);
-          var previousSourceKey = sourceKey;
-          await showDialog(
-            context: context,
-            useRootNavigator: true,
-            builder: (context) {
-              return _SearchSettingsDialog(state: this);
+              var previousOptions = List<String>.from(options);
+              var previousSourceKey = sourceKey;
+              await showDialog(
+                context: context,
+                useRootNavigator: true,
+                builder: (context) {
+                  return _SearchSettingsDialog(state: this);
+                },
+              );
+              if (!previousOptions.isEqualTo(options) ||
+                  previousSourceKey != sourceKey) {
+                text = _applyConfiguredLanguageFilter(controller.text);
+                controller.currentText = text;
+                setState(() {});
+              }
             },
-          );
-          if (!previousOptions.isEqualTo(options) ||
-              previousSourceKey != sourceKey) {
-            text = _applyConfiguredLanguageFilter(controller.text);
-            controller.currentText = text;
-            setState(() {});
-          }
-        },
-      ),
+          ),
+        ),
+      ],
     );
   }
 }

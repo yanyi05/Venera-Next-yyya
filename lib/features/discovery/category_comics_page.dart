@@ -143,7 +143,10 @@ class _CategoryComicsPageState extends State<CategoryComicsPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: Appbar(title: Text(widget.category)),
+      appBar: Appbar(
+        title: Text(widget.category),
+        actions: [SourceVerificationButton(sourceKey: sourceKey)],
+      ),
       body: body,
     );
   }
