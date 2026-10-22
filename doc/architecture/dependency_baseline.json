@@ -705,7 +705,8 @@
     "routing/settings.dart",
     "routing/webview.dart",
     "features/bangumi/bangumi_page.dart",
-    "features/bangumi/bangumi_comic.dart"
+    "features/bangumi/bangumi_comic.dart",
+    "features/settings/smart_downloads.dart"
   ],
   "acyclic_business_files": [
     "foundation/app.dart",
@@ -1075,7 +1076,10 @@
     "network/webdav.dart",
     "features/bangumi/bangumi_client.dart",
     "features/bangumi/bangumi_service.dart",
-    "features/local_comics/download_policy.dart"
+    "features/local_comics/download_policy.dart",
+    "app_runtime/smart_downloads.dart",
+    "foundation/smart_download_request.dart",
+    "features/local_comics/smart_download_policy.dart"
   ],
   "pending_review_files": []
 }

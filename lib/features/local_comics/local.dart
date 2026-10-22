@@ -681,10 +681,29 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
 
   void resumeDownload(DownloadTask task) {
     _storageAccess.check();
+    task.prepareManualResume();
     _downloadQueue.resume(task);
+    unawaited(
+      saveCurrentDownloadingTasks().catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        Log.error('Download resume', error, stack);
+      }),
+    );
   }
 
-  Future<void> pauseDownload(DownloadTask task) => _downloadQueue.pause(task);
+  Future<void> pauseDownload(
+    DownloadTask task, {
+    bool automaticPolicy = false,
+  }) async {
+    final stopped = _downloadQueue.pause(
+      task,
+      automaticPolicy: automaticPolicy,
+    );
+    await saveCurrentDownloadingTasks();
+    await stopped;
+  }
 
   Future<void> moveToFirst(DownloadTask task) {
     _storageAccess.check();

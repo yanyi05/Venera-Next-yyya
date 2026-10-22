@@ -67,9 +67,19 @@ class DownloadQueue {
   void add(DownloadTask task) {
     if (_suspension != null) throw StateError('Download queue is suspended');
     if (contains(task.id, task.comicType)) return;
+    final wasEmpty = _tasks.isEmpty;
+    final keepRunning = isResumePending || tasks.firstOrNull?.isPaused == false;
     _tasks.add(task);
     final revision = ++_revision;
     _publish();
+    if (task.isAutomatic && !wasEmpty) {
+      if (keepRunning) _resumeIfUnchanged(revision);
+      return;
+    }
+    if (!task.isAutomatic && tasks.firstOrNull?.isAutomatic == true) {
+      unawaited(moveToFirst(task, resume: true).catchError(reportError));
+      return;
+    }
     _resumeIfUnchanged(revision);
   }
 
@@ -130,12 +140,15 @@ class DownloadQueue {
     _resumeIfUnchanged(revision);
   }
 
-  Future<void> pause(DownloadTask task) {
+  Future<void> pause(DownloadTask task, {bool automaticPolicy = false}) {
     if (_suspension != null) return _suspension!.future;
     if (!identical(tasks.firstOrNull, task)) return Future.value();
     _revision++;
     _scheduledResumeRevision = null;
-    final stopped = _stopBeforeScheduling(task, task.pause);
+    final stopped = _stopBeforeScheduling(
+      task,
+      automaticPolicy ? task.pauseForScheduling : task.pause,
+    );
     notifyChanged();
     return stopped;
   }
@@ -171,14 +184,14 @@ class DownloadQueue {
     _publish();
   }
 
-  Future<void> moveToFirst(DownloadTask task) {
+  Future<void> moveToFirst(DownloadTask task, {bool resume = false}) {
     if (_suspension != null) return _suspension!.future;
     if (_indexOf(task) <= 0) return Future.value();
     final first = tasks.first;
     final shouldResume =
-        !first.isPaused || _scheduledResumeRevision == _revision;
+        resume || !first.isPaused || _scheduledResumeRevision == _revision;
     final beforePause = _revision;
-    final stopped = _stopBeforeScheduling(first, first.pause);
+    final stopped = _stopBeforeScheduling(first, first.pauseForScheduling);
     if (beforePause != _revision || !identical(tasks.firstOrNull, first)) {
       return stopped;
     }
@@ -201,7 +214,7 @@ class DownloadQueue {
     _revision++;
     _scheduledResumeRevision = null;
     for (final task in List<DownloadTask>.of(tasks)) {
-      _stopBeforeScheduling(task, task.pause);
+      _stopBeforeScheduling(task, task.pauseForScheduling);
     }
     if (notify) notifyChanged();
     unawaited(() async {

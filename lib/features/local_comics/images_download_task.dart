@@ -24,6 +24,7 @@ import 'download_task.dart';
 import 'download_directory_allocator.dart';
 import 'download_retry.dart';
 import 'download_policy.dart';
+import 'smart_download_policy.dart';
 
 class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   final ComicSource source;
@@ -35,6 +36,24 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
 
   /// chapters to download. If null, all chapters will be downloaded.
   final List<String>? chapters;
+  final bool automatic;
+  bool _automaticUserPaused = false;
+  @override
+  bool get isAutomatic => automatic;
+  @override
+  bool get canAutomaticallyResume =>
+      automatic && !_automaticUserPaused && !isError;
+  @override
+  void prepareManualResume() {
+    _automaticUserPaused = false;
+  }
+
+  @override
+  void pauseForScheduling() {
+    final wasUserPaused = _automaticUserPaused;
+    pause();
+    _automaticUserPaused = wasUserPaused;
+  }
 
   @override
   String get id => comicId;
@@ -51,6 +70,7 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     this.comic,
     this.chapters,
     this.comicTitle,
+    this.automatic = false,
     Stream<ImageDownloadProgress> Function(String, String)? loadThumbnail,
     ComicImageLoader? loadImage,
     Future<DownloadDirectoryAllocation> Function(String, ComicType, String)?
@@ -143,9 +163,16 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   String? get cover => _cover ?? comic?.cover;
 
   @override
-  String get message => isWaitingToRetry
-      ? 'Connection interrupted. Waiting to retry...'.tl
-      : _message;
+  String get message {
+    if (automatic && !isError) {
+      if (_automaticUserPaused) return '智能预下载 · 已手动暂停';
+      if (!AutomaticDownloadGate.allowed) return '智能预下载 · 等待网络／充电条件';
+    }
+    final value = isWaitingToRetry
+        ? 'Connection interrupted. Waiting to retry...'.tl
+        : _message;
+    return automatic ? '智能预下载 · $value' : value;
+  }
 
   DownloadRetry? _retry;
 
@@ -159,6 +186,7 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
 
   @override
   void pause() {
+    if (automatic) _automaticUserPaused = true;
     if (isPaused) return;
     _message = "Paused".tl;
     _stopRun();
@@ -308,6 +336,9 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
 
   @override
   void resume() {
+    if (automatic && (_automaticUserPaused || !AutomaticDownloadGate.allowed)) {
+      return;
+    }
     if (_isRunning) return;
     final generation = ++_runGeneration;
     _retry = DownloadRetry(
@@ -360,6 +391,13 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     }
 
     if (path == null) {
+      if (automatic &&
+          (chapters == null ||
+              comic!.chapters == null ||
+              !chapters!.every(comic!.chapters!.ids.contains))) {
+        _setError('智能预下载章节已变化，请手动选择下载');
+        return;
+      }
       try {
         final allocation = _allocationFuture = _allocateOutput();
         try {
@@ -542,6 +580,8 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   Map<String, dynamic> toJson() {
     return {
       "type": "ImagesDownloadTask",
+      "automatic": automatic,
+      "automaticUserPaused": _automaticUserPaused,
       "source": source.key,
       "comicId": comicId,
       "comic": comic?.toJson(),
@@ -582,7 +622,9 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
             ? null
             : ComicDetails.fromJson(json["comic"]),
         chapters: ListOrNull.from(json["chapters"]),
+        automatic: json['automatic'] == true,
       )
+      .._automaticUserPaused = json['automaticUserPaused'] == true
       ..path = json["path"]
       .._cover = json["cover"]
       .._images = images

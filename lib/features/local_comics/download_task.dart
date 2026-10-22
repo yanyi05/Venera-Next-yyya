@@ -11,6 +11,10 @@ abstract class DownloadTask with ChangeNotifier {
   bool get isPaused;
 
   bool get isWaitingToRetry => false;
+  bool get isAutomatic => false;
+  bool get canAutomaticallyResume => false;
+  void prepareManualResume() {}
+  void pauseForScheduling() => pause();
 
   /// A network/foreground hint may wake an existing wait, never resume a task.
   void retryNow() {}

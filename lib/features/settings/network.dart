@@ -2,6 +2,7 @@ import 'package:venera_next/foundation/proxy_configuration.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:flutter/material.dart';
+import 'smart_downloads.dart';
 import 'package:venera_next/components/appbar.dart';
 import 'package:venera_next/components/pop_up_widget.dart';
 import 'package:venera_next/components/scroll.dart';
@@ -39,6 +40,13 @@ class _NetworkSettingsState extends State<NetworkSettings> {
         SliderSetting.preference(
           title: "Download Threads".tl,
           preference: NetworkPreferences.downloadThreads,
+        ).toSliver(),
+        ListTile(
+          title: const Text('智能预下载'),
+          subtitle: const Text('网络、充电条件及提前下载章节数'),
+          leading: const Icon(Icons.download_for_offline_outlined),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.to(() => const SmartDownloadSettingsPage()),
         ).toSliver(),
       ],
     );

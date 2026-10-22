@@ -1,6 +1,7 @@
 import 'package:venera_next/features/history/history_scope.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'dart:async';
+import 'package:venera_next/foundation/smart_download_request.dart';
 import 'package:venera_next/features/bangumi/bangumi_service.dart';
 
 import 'package:flutter/material.dart';
@@ -1916,7 +1917,22 @@ class ReaderState extends State<Reader>
     _session.setContentReady(false);
   }
 
-  void onReaderContentReady() => _session.setContentReady(true);
+  void onReaderContentReady() {
+    _session.setContentReady(true);
+    final chapters = widget.chapters;
+    if (!_sessionFrozen && type != ComicType.local && chapters != null) {
+      SmartDownloadRequests.instance.publish(
+        SmartDownloadTarget(
+          source: type.sourceKey,
+          comic: cid,
+          title: widget.name,
+          directory: App.dataPath,
+          chapter: eid,
+          chapters: chapters.ids.toList(),
+        ),
+      );
+    }
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
