@@ -98,77 +98,15 @@ Uint8List _cropBaoziBannerBand(List<dynamic> args) {
 }
 
 Uint8List _removeBaoziBanner(Uint8List bytes) {
-  try {
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null || decoded.numFrames != 1) return bytes;
-    final width = decoded.width;
-    final height = decoded.height;
-    if (width < 400 || height < 600 || width * height > 12 * 1000 * 1000) {
-      return bytes;
-    }
-
-    // A full-width white band plus Baozi's centered yellow logo and dark text
-    // is required. White gutters and speech bubbles alone are not enough.
-    final xStep = (width / 360).ceil().clamp(1, 8).toInt();
-    final goodRows = List<bool>.filled(height, false);
-    for (var y = 0; y < height; y++) {
-      var white = 0;
-      var samples = 0;
-      for (var x = 0; x < width; x += xStep) {
-        final p = decoded.getPixel(x, y);
-        if (p.r > 232 && p.g > 232 && p.b > 232) white++;
-        samples++;
-      }
-      // Text and the logo interrupt some scanlines, so allow roughly half
-      // the row to be non-white while still requiring a mostly white banner.
-      goodRows[y] = samples > 0 && white / samples >= 0.52;
-    }
-
-    var start = 0;
-    while (start < height) {
-      if (!goodRows[start]) {
-        start++;
-        continue;
-      }
-      var end = start + 1;
-      while (end < height && goodRows[end]) end++;
-      final bandHeight = end - start;
-      final minBand = (height * 0.025).round();
-      final maxBand = (height * 0.20).round();
-      if (bandHeight >= minBand && bandHeight <= maxBand &&
-          _hasBaoziLogoAndText(decoded, start, end, xStep)) {
-        final topHeight = start;
-        final bottomHeight = height - end;
-        if (topHeight < height * 0.12 || bottomHeight < height * 0.12) {
-          start = end;
-          continue;
-        }
-        final result = img.Image(width: width, height: height - bandHeight);
-        final top = img.copyCrop(
-          decoded,
-          x: 0,
-          y: 0,
-          width: width,
-          height: topHeight,
-        );
-        final bottom = img.copyCrop(
-          decoded,
-          x: 0,
-          y: end,
-          width: width,
-          height: bottomHeight,
-        );
-        img.compositeImage(result, top, dstX: 0, dstY: 0);
-        img.compositeImage(result, bottom, dstX: 0, dstY: topHeight);
-        return Uint8List.fromList(img.encodeJpg(result, quality: 94));
-      }
-      start = end;
-    }
-    return bytes;
-  } catch (_) {
-    // Image decoding/cropping must never break the reader.
-    return bytes;
-  }
+  // Use the same candidate finder as the preview/editor so automatic and
+  // manual cropping agree, including banners placed at the image edges.
+  final band = _findBaoziBannerBand(bytes);
+  if (band == null || band[2] <= 0) return bytes;
+  return _cropBaoziBannerBand([
+    bytes,
+    band[0] / band[2],
+    band[1] / band[2],
+  ]);
 }
 
 bool _hasBaoziLogoAndText(img.Image image, int top, int bottom, int step) {
