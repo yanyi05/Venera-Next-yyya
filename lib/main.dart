@@ -229,11 +229,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (widget.host.isClosing) return;
     if (state == AppLifecycleState.resumed) {
+      if (App.isIOS) _backgroundSync.start();
       BangumiService.instance.start();
       _dataSync.checkForAutomaticSync(startup: true);
       _library.source.synchronizer.checkForAutomaticSync();
     }
     if (state == AppLifecycleState.paused) {
+      if (App.isIOS) {
+        _backgroundSync.stop();
+        BangumiService.instance.stop();
+      }
       unawaited(
         _dataSync.onBackground().catchError((Object error, StackTrace stack) {
           Log.error('Data Sync background', error, stack);

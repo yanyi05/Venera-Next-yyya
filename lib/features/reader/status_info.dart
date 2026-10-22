@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:venera_next/foundation/app.dart';
 
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +57,7 @@ class _ReaderStatusInfoState extends State<ReaderStatusInfo> {
     final owner = _owner = _StatusOwner(
       context,
       ReaderStatusPolling(
+        alignToMinute: App.isIOS,
         readBattery: widget.readBattery ?? _platformBatteryReader(),
         now: widget.now ?? DateTime.now,
         onChanged: () {

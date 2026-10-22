@@ -33,6 +33,10 @@ DataSyncController createApplicationDataSync({
   controller = DataSyncController(
     useV117WebDav: useV117WebDav,
     reliableAutomaticSync: useV117WebDav,
+    automaticIdleInterval: App.isIOS
+        ? const Duration(minutes: 5)
+        : const Duration(seconds: 60),
+    coalesceAutomaticChecks: App.isIOS,
     preferences: createAppSyncPreferences(appdata),
     transfer:
         transfer ??

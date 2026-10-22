@@ -19,6 +19,8 @@ class SyncTestFixture {
     DataSyncImportRecovery? importRecovery,
     bool useV117WebDav = false,
     bool reliableAutomaticSync = false,
+    Duration automaticIdleInterval = const Duration(seconds: 60),
+    bool coalesceAutomaticChecks = false,
   }) {
     final settings = <String, dynamic>{
       'webdav': ['https://example.com/dav', 'user', 'password'],
@@ -41,6 +43,8 @@ class SyncTestFixture {
       importRecovery: importRecovery,
       useV117WebDav: useV117WebDav,
       reliableAutomaticSync: reliableAutomaticSync,
+      automaticIdleInterval: automaticIdleInterval,
+      coalesceAutomaticChecks: coalesceAutomaticChecks,
     );
   }
 

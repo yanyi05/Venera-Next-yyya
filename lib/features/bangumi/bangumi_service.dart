@@ -18,6 +18,7 @@ class BangumiService {
   bool _draining = false;
   bool _drainRequested = false;
   bool _active = true;
+  int _failures = 0;
   void start() {
     _active = true;
     unawaited(drain());
@@ -126,6 +127,7 @@ class BangumiService {
       );
       await temp.rename(file.path);
       lastError = null;
+      _failures = 0;
       _active = true;
       _schedule();
     } finally {
@@ -259,7 +261,8 @@ class BangumiService {
         if (value['user'] != user) continue;
         final id = value['subjectId'] as int;
         await _serialize(() async {
-          if (!_active || directory != App.dataPath ||
+          if (!_active ||
+              directory != App.dataPath ||
               ReadingActivity.instance.isReading ||
               jsonEncode(
                     map(appdata.settings['bangumiPendingProgress'])[entry.key],
@@ -290,15 +293,22 @@ class BangumiService {
         });
       }
       lastError = null;
+      _failures = 0;
     } catch (error) {
       lastError = error.toString();
-      _schedule(const Duration(seconds: 60));
+      _failures++;
+      if (error is! BangumiFailure ||
+          !const [401, 403].contains(error.status)) {
+        _schedule(
+          Duration(seconds: (30 * (1 << _failures.clamp(1, 5))).clamp(60, 900)),
+        );
+      }
     } finally {
       api?.close();
       _draining = false;
       if (_drainRequested) {
         _drainRequested = false;
-        _schedule();
+        if (lastError == null) _schedule();
       }
     }
   }

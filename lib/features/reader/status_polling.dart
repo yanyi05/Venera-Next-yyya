@@ -15,12 +15,14 @@ class ReaderStatusPolling {
     required this.readBattery,
     required DateTime Function() now,
     required void Function() onChanged,
+    this.alignToMinute = false,
   }) : _now = now,
        _onChanged = onChanged {
     _updateClock();
   }
 
   final ReaderBatteryRead readBattery;
+  final bool alignToMinute;
   DateTime Function() _now;
   void Function()? _onChanged;
   Timer? _timer;
@@ -61,8 +63,29 @@ class ReaderStatusPolling {
       return;
     }
     // Install the timer before invoking callbacks that can reenter close.
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    if (alignToMinute) {
+      _armMinute();
+    } else {
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    }
     _tick();
+  }
+
+  void _armMinute() {
+    final now = _now();
+    final elapsed =
+        now.second * Duration.microsecondsPerSecond +
+        now.millisecond * Duration.microsecondsPerMillisecond +
+        now.microsecond;
+    _timer = Timer(
+      Duration(microseconds: Duration.microsecondsPerMinute - elapsed),
+      () {
+        if (!_active || _closed) return;
+        // Own the next wake before callbacks can pause or close this poller.
+        _armMinute();
+        _tick();
+      },
+    );
   }
 
   void _tick() {

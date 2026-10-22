@@ -91,6 +91,8 @@ class DataSyncController with ChangeNotifier {
     Timer Function(Duration, void Function())? createTimer,
     bool useV117WebDav = false,
     bool reliableAutomaticSync = false,
+    Duration automaticIdleInterval = const Duration(seconds: 60),
+    bool coalesceAutomaticChecks = false,
   }) : _syncPreferences = preferences,
        _transferFactory = transfer,
        _saveSettings = saveSettings,
@@ -102,6 +104,8 @@ class DataSyncController with ChangeNotifier {
        _ownership = ownership,
        _useV117WebDav = useV117WebDav,
        _reliableAutomaticSync = reliableAutomaticSync,
+       _automaticIdleInterval = automaticIdleInterval,
+       _coalesceAutomaticChecks = coalesceAutomaticChecks,
        _clock = now ?? DateTime.now,
        _createTimer = createTimer ?? Timer.new;
 
@@ -118,6 +122,8 @@ class DataSyncController with ChangeNotifier {
   final DataSyncOwnership? _ownership;
   final bool _useV117WebDav;
   final bool _reliableAutomaticSync;
+  final Duration _automaticIdleInterval;
+  final bool _coalesceAutomaticChecks;
   int _automaticFailures = 0;
   bool _changeScheduled = false;
   bool _readingActive = false;
@@ -317,6 +323,18 @@ class DataSyncController with ChangeNotifier {
       return;
     }
     if (currentMode == DataSyncMode.realtime) {
+      if (_coalesceAutomaticChecks &&
+          _reliableAutomaticSync &&
+          !hasPendingChanges &&
+          _automaticFailures == 0 &&
+          _completion == null &&
+          _lastRealtimeCheck != null) {
+        final elapsed = _now.difference(_lastRealtimeCheck!);
+        if (!elapsed.isNegative && elapsed < _automaticIdleInterval) {
+          _scheduleReliable(_automaticIdleInterval - elapsed);
+          return;
+        }
+      }
       if (!_reliableAutomaticSync &&
           !startup &&
           _lastRealtimeCheck != null &&
@@ -1273,7 +1291,7 @@ class DataSyncController with ChangeNotifier {
                   : hasPendingChanges
                   ? const Duration(seconds: 10)
                   : currentMode == DataSyncMode.realtime
-                  ? const Duration(seconds: 60)
+                  ? _automaticIdleInterval
                   : Duration(minutes: currentIntervalMinutes);
               _scheduleReliable(
                 delay,
