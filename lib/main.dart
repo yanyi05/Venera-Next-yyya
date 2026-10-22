@@ -21,6 +21,7 @@ import 'package:venera_next/app_runtime/window_placement.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'dart:async';
+import 'package:venera_next/features/bangumi/bangumi_service.dart';
 import 'package:venera_next/app_runtime/sync_window_binding.dart';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -165,6 +166,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (widget.host.isClosing) return;
     _mount = widget.host.attach(
       stop: () {
+        BangumiService.instance.stop();
         _backgroundSync.stop();
         _startupUpdates.cancel();
       },
@@ -181,6 +183,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _interactiveBindings.start();
         _backgroundSync.start();
         _followUpdates.start();
+        BangumiService.instance.start();
         unawaited(
           _startupUpdates.start().catchError((Object error, StackTrace stack) {
             Log.error('Startup update check', error, stack);
@@ -226,6 +229,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (widget.host.isClosing) return;
     if (state == AppLifecycleState.resumed) {
+      BangumiService.instance.start();
       _dataSync.checkForAutomaticSync(startup: true);
       _library.source.synchronizer.checkForAutomaticSync();
     }

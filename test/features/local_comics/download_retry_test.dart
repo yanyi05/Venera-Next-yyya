@@ -160,7 +160,7 @@ void main() {
       type: DioExceptionType.badCertificate,
     ),
     DioException(requestOptions: request, type: DioExceptionType.cancel),
-    for (final code in [401, 403, 404, 429, 500])
+    for (final code in [401, 403, 404, 500])
       DioException(
         requestOptions: request,
         type: DioExceptionType.badResponse,

@@ -232,6 +232,26 @@
     [
       "webdav_library",
       "comic_storage"
+    ],
+    [
+      "settings",
+      "bangumi"
+    ],
+    [
+      "comic_details",
+      "bangumi"
+    ],
+    [
+      "reader",
+      "bangumi"
+    ],
+    [
+      "bangumi",
+      "search"
+    ],
+    [
+      "bangumi",
+      "comic_source"
     ]
   ],
   "business_entrypoints": [
@@ -683,7 +703,9 @@
     "routing/page_jump_target.dart",
     "routing/page_replacement.dart",
     "routing/settings.dart",
-    "routing/webview.dart"
+    "routing/webview.dart",
+    "features/bangumi/bangumi_page.dart",
+    "features/bangumi/bangumi_comic.dart"
   ],
   "acyclic_business_files": [
     "foundation/app.dart",
@@ -1050,7 +1072,10 @@
     "network/rhttp_stream_request.dart",
     "network/shared_image_requests.dart",
     "network/shared_request_stream.dart",
-    "network/webdav.dart"
+    "network/webdav.dart",
+    "features/bangumi/bangumi_client.dart",
+    "features/bangumi/bangumi_service.dart",
+    "features/local_comics/download_policy.dart"
   ],
   "pending_review_files": []
 }

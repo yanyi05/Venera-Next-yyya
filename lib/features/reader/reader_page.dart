@@ -1,6 +1,7 @@
 import 'package:venera_next/features/history/history_scope.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'dart:async';
+import 'package:venera_next/features/bangumi/bangumi_service.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show listEquals;
@@ -1003,7 +1004,22 @@ class ReaderState extends State<Reader>
   Future<void> _closeSession() {
     if (_sessionClosing case final closing?) return closing;
     _freezeSession();
-    final closing = _sessionClosing = _session.dispose();
+    final sourceKey = type.sourceKey, comicId = cid;
+    final completed = Set<String>.of(_bangumiCompletedChapters);
+    final closing = _sessionClosing = () async {
+      await _session.dispose();
+      if (completed.isNotEmpty) {
+        try {
+          await BangumiService.instance.completed(
+            sourceKey,
+            comicId,
+            completed,
+          );
+        } catch (error, stack) {
+          Log.error('Bangumi progress', error, stack);
+        }
+      }
+    }();
     _exitFrame?.removeCloseStartListener(_holdWindowSession);
     _exitFrame?.removeCloseFailureListener(_resumeWindowSession);
     _exitFrame?.removeExitTask(_prepareWindowSession);
@@ -1972,6 +1988,8 @@ class ReaderState extends State<Reader>
     if (!_stateDisposed) _targetValidity.value++;
   }
 
+  final _bangumiCompletedChapters = <String>{};
+
   void updateHistory() {
     // Initial layout and orientation can update the viewport before images
     // arrive. Keep the saved image index intact until loading/migration ends.
@@ -1986,6 +2004,9 @@ class ReaderState extends State<Reader>
         layout: pageLayout,
         time: DateTime.now(),
       );
+      if (images!.isNotEmpty && history!.page >= images!.length) {
+        _bangumiCompletedChapters.add(eid);
+      }
       _session.scheduleProgress();
       // A content/animation completion can arrive after the reader's own exit
       // task returned while another owner is still preparing. Register the

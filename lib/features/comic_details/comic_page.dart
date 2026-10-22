@@ -3,6 +3,7 @@ import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'package:venera_next/components/file_save_task.dart';
 import 'package:venera_next/network/request_scope.dart';
 import 'dart:async';
+import 'package:venera_next/features/bangumi/bangumi_comic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
@@ -258,6 +259,16 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         slivers: [
           ...buildTitle(),
           buildActions(),
+          if (widget.sourceKey != 'local')
+            SliverToBoxAdapter(
+              child: BangumiComicCard(
+                key: ValueKey('${widget.sourceKey}:${widget.id}'),
+                source: widget.sourceKey,
+                comic: widget.id,
+                title: data.title,
+                chapters: data.chapters,
+              ),
+            ),
           buildDescription(),
           buildInfo(),
           buildChapters(),

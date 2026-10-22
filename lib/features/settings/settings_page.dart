@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:venera_next/features/bangumi/bangumi_page.dart';
 import 'package:venera_next/components/gesture.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/translations.dart';
@@ -39,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
     "Network",
     "About",
     "Debug",
+    "Bangumi",
   ];
 
   final icons = <IconData>[
@@ -51,6 +53,7 @@ class _SettingsPageState extends State<SettingsPage> {
     Icons.public,
     Icons.info,
     Icons.bug_report,
+    Icons.auto_stories_outlined,
   ];
 
   @override
@@ -230,6 +233,7 @@ class _SettingsPageState extends State<SettingsPage> {
       6 => const NetworkSettings(),
       7 => const AboutSettings(),
       8 => const DebugPage(),
+      9 => const BangumiPage(),
       _ => throw UnimplementedError(),
     };
   }
@@ -256,6 +260,7 @@ class _SettingsDetailPage extends StatelessWidget {
       6 => const NetworkSettings(),
       7 => const AboutSettings(),
       8 => const DebugPage(),
+      9 => const BangumiPage(),
       _ => throw UnimplementedError(),
     };
   }

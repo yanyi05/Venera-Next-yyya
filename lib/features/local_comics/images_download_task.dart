@@ -2,6 +2,7 @@ import 'package:venera_next/foundation/operation_failure.dart';
 import 'local_chapter_storage.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'dart:async';
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
@@ -22,6 +23,7 @@ import 'package:venera_next/foundation/file_interaction.dart';
 import 'download_task.dart';
 import 'download_directory_allocator.dart';
 import 'download_retry.dart';
+import 'download_policy.dart';
 
 class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   final ComicSource source;
@@ -221,8 +223,16 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
 
   var tasks = <int, _ImageDownloadWrapper>{};
 
-  int get _maxConcurrentTasks =>
-      GlobalPreferenceStore(appdata.settings).network.downloadThreads;
+  int get _maxConcurrentTasks {
+    final configured = GlobalPreferenceStore(
+      appdata.settings,
+    ).network.downloadThreads;
+    // Drain already-started transfers; admit only one new image while reading.
+    return readingDownloadConcurrency(
+      configured,
+      reading: ReadingActivity.instance.isReading,
+    );
+  }
 
   int _runGeneration = 0;
 
@@ -398,7 +408,7 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
         }
         var fileType = detectFileType(data);
         var file = File(FilePath.join(path!, "cover${fileType.ext}"));
-        file.writeAsBytesSync(data);
+        await file.writeAsBytes(data);
         return "file://${file.path}";
       });
       if (!_isCurrentRun(generation)) {
@@ -722,9 +732,15 @@ class _ImageDownloadWrapper {
             continue;
           }
           var file = saveTo.joinFile(fileName);
-          final activeWrite = file
-              .writeAsBytes(progress.imageBytes!)
-              .then<void>((_) {});
+          final partial = File('${file.path}.part');
+          final activeWrite = () async {
+            try {
+              await partial.writeAsBytes(progress.imageBytes!);
+              if (!isCancelled) await partial.rename(file.path);
+            } finally {
+              if (await partial.exists()) await partial.delete();
+            }
+          }();
           _activeWrite = activeWrite;
           try {
             await activeWrite;

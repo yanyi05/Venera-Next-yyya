@@ -57,7 +57,9 @@ class DownloadRetry {
         final kind = _classify(error);
         final Duration? delay;
         if (kind == _Failure.connection) {
-          delay = attempt < delays.length ? delays[attempt] : null;
+          delay = attempt < delays.length
+              ? downloadRetryAfter(error) ?? delays[attempt]
+              : null;
         } else if (kind == _Failure.unknown && retryUnknown && attempt < 2) {
           // Legacy source scripts can return untyped messages. Keep their
           // short retries without treating arbitrary strings as a disconnect.
@@ -106,6 +108,9 @@ _Failure _classify(Object error, [int depth = 0]) {
       case DioExceptionType.badCertificate:
       case DioExceptionType.transformTimeout:
       case DioExceptionType.badResponse:
+        return const [429, 503].contains(error.response?.statusCode)
+            ? _Failure.connection
+            : _Failure.terminal;
       case DioExceptionType.cancel:
         return _Failure.terminal;
     }
@@ -126,4 +131,34 @@ _Failure _classify(Object error, [int depth = 0]) {
     return _Failure.terminal;
   }
   return _Failure.unknown;
+}
+
+/// A bounded Retry-After wait for throttling/unavailability; authentication and
+/// challenge failures remain terminal and never enter this retry loop.
+Duration? downloadRetryAfter(Object error, {DateTime? now}) {
+  Object? current = error;
+  for (var depth = 0; depth < 8; depth++) {
+    if (current is FailureDetails) {
+      current = current.cause;
+      continue;
+    }
+    if (current is! DioException ||
+        !const [429, 503].contains(current.response?.statusCode)) {
+      return null;
+    }
+    final value = current.response?.headers.value('retry-after');
+    if (value == null) return null;
+    var seconds = int.tryParse(value);
+    if (seconds == null) {
+      try {
+        seconds = HttpDate.parse(
+          value,
+        ).difference(now ?? DateTime.now().toUtc()).inSeconds;
+      } catch (_) {
+        return null;
+      }
+    }
+    return Duration(seconds: seconds.clamp(1, 300));
+  }
+  return null;
 }

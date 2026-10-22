@@ -2,6 +2,7 @@
 /// and import policy together so transport bookkeeping cannot create dirty data.
 const appDataLocalFields = {
   'proxy',
+  'bangumiPendingProgress',
   'authorizationRequired',
   'customImageProcessing',
   'webdav',
