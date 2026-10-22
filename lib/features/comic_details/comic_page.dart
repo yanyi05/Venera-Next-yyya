@@ -25,8 +25,6 @@ import 'package:venera_next/features/comic_details/cover_viewer.dart';
 import 'package:venera_next/features/comic_details/thumbnails.dart';
 import 'package:venera_next/foundation/app_locale.dart';
 import 'package:venera_next/features/comic_source/comic_source.dart';
-import 'package:venera_next/features/comic_source/comic_source_page.dart'
-    show openSourceWebLogin;
 import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/foundation/consts.dart';
 import 'package:venera_next/foundation/context.dart';
@@ -342,7 +340,9 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
             tooltip: 'Verify source cookies'.tl,
             onPressed: () {
               final source = ComicSource.find(comic.sourceKey);
-              if (source != null) unawaited(openSourceWebLogin(context, source));
+              if (source != null) {
+                unawaited(openSourceWebLogin(context, source));
+              }
             },
             icon: const Icon(Icons.language),
           ),

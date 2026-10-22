@@ -45,6 +45,7 @@ import 'shell_host.dart';
 import 'progress_navigation.dart';
 import 'image_picker.dart';
 import 'image_position.dart';
+import 'reader_image_banner_crops.dart';
 import 'package:venera_next/features/reader/volume.dart';
 import 'package:venera_next/features/reader/volume_controller.dart';
 import 'package:venera_next/features/reader/window_controller.dart';
@@ -153,6 +154,7 @@ class ReaderState extends State<Reader>
       throw StateError('The selected image is no longer current');
     }
     await CacheManager().delete(address.cacheKey);
+    await CacheManager().delete('${address.cacheKey}@original');
     for (final resize in [false, true]) {
       PaintingBinding.instance.imageCache.evict(
         ReaderImageProvider(
@@ -167,6 +169,7 @@ class ReaderState extends State<Reader>
       );
     }
     if (!mounted || _stateDisposed) return;
+    ReaderImageBannerCrops.invalidate(address);
     _imageRefreshChanges.value++;
   }
 

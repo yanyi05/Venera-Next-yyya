@@ -10,13 +10,14 @@ import 'package:venera_next/network/images.dart';
 import 'package:venera_next/network/image_stream.dart';
 import 'base_image_provider.dart';
 import 'package:venera_next/foundation/appdata.dart';
-import 'package:venera_next/features/reader/baozi_banner_filter.dart';
-import 'package:venera_next/features/reader/image_position.dart';
-import 'package:venera_next/features/reader/reader_image_banner_crops.dart';
+import 'package:venera_next/foundation/image_band_transform.dart';
+import 'package:venera_next/foundation/reader_image_address.dart';
+import 'package:venera_next/foundation/reader_image_crops.dart';
+import 'package:venera_next/foundation/cache_manager.dart';
 
 class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
   /// Image provider for normal image.
-  const ReaderImageProvider(
+  ReaderImageProvider(
     this.imageKey,
     this.sourceKey,
     this.cid,
@@ -24,8 +25,16 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
     this.page, {
     this.enableResize = false,
     this.reloadRevision = 0,
-  });
+  }) : cropRevision = ReaderImageBannerCrops.revision(
+         ReaderImageAddress(
+           imageKey: imageKey,
+           sourceKey: sourceKey,
+           comicId: cid,
+           chapterId: eid,
+         ),
+       );
 
+  final int cropRevision;
   final String imageKey;
 
   final String? sourceKey;
@@ -46,9 +55,21 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
   @override
   bool get retryFileSystemErrors => !imageKey.startsWith('file://');
 
+  Future<Uint8List?> _readOriginal(ReaderImageAddress address) async {
+    final file = await CacheManager().findCache('${address.cacheKey}@original');
+    return file?.readAsBytes();
+  }
+
   @override
   Future<Uint8List> load(chunkEvents, checkStop) async {
     checkStop();
+    final address = ReaderImageAddress(
+      imageKey: imageKey,
+      sourceKey: sourceKey,
+      comicId: cid,
+      chapterId: eid,
+    );
+    final manualBands = ReaderImageBannerCrops.readBands(address);
     Uint8List? imageBytes;
     if (imageKey.startsWith('file://')) {
       final file = createLocalFile(imageKey.substring(7));
@@ -66,7 +87,11 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
         throw FileSystemException('File not found', file.path);
       }
     } else {
-      imageBytes = await readImageStream(
+      if (manualBands != null) {
+        imageBytes = await _readOriginal(address);
+        checkStop();
+      }
+      imageBytes ??= await readImageStream(
         ImageDownloader.loadComicImage(imageKey, sourceKey, cid, eid),
         cancelSignal: BaseImageProvider.cancelSignalOf(checkStop),
         checkStop: checkStop,
@@ -78,28 +103,26 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
         ),
       );
     }
-    if (imageBytes == null) {
-      throw OperationFailure.message("Error: Empty response body.");
-    }
-    checkStop();
-    final isBaoziRemote = !imageKey.startsWith('file://') &&
-        (sourceKey == 'baozi' || isBaoziComicImage(imageKey));
-    final address = ReaderImageAddress(
-      imageKey: imageKey,
-      sourceKey: sourceKey,
-      comicId: cid,
-      chapterId: eid,
-    );
-    final manualBand = isBaoziRemote
-        ? ReaderImageBannerCrops.read(address)
-        : null;
-    if (manualBand != null) {
-      imageBytes = await cropBaoziBannerBand(imageBytes, manualBand);
+    if (manualBands != null && !imageKey.startsWith('file://')) {
+      imageBytes = await _readOriginal(address);
       checkStop();
     }
-    if (GlobalPreferenceStore(
-      appdata.settings,
-    ).read(ImageProcessingPreferences.enabled)) {
+    if (imageBytes == null) {
+      throw OperationFailure.message(
+        manualBands == null
+            ? "Error: Empty response body."
+            : "Original image unavailable. Reload image from source.",
+      );
+    }
+    checkStop();
+    if (manualBands != null && manualBands.isNotEmpty) {
+      imageBytes = await cropImageBannerBands(imageBytes, manualBands);
+      checkStop();
+    }
+    if (manualBands == null &&
+        GlobalPreferenceStore(
+          appdata.settings,
+        ).read(ImageProcessingPreferences.enabled)) {
       var script = GlobalPreferenceStore(
         appdata.settings,
       ).read(ImageProcessingPreferences.script);
@@ -116,11 +139,6 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
         );
       }
     }
-    if (isBaoziRemote && manualBand == null) {
-      checkStop();
-      imageBytes = await removeBaoziBanner(imageBytes);
-      checkStop();
-    }
     return imageBytes;
   }
 
@@ -131,5 +149,5 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
 
   @override
   String get key =>
-      "$imageKey@$sourceKey@$cid@$eid@$enableResize@$reloadRevision";
+      "$imageKey@$sourceKey@$cid@$eid@$enableResize@$reloadRevision@$cropRevision";
 }

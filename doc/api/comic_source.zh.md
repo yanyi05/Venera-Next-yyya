@@ -392,3 +392,8 @@ translation = {
 | 追更一直无变化 | `updateTime` 是否可靠且符合日期格式，是否仅在同一天内更新 |
 | 章节乱序或跨章错误 | 整数对象键排序、重复章节 ID、分组顺序及图片数组顺序 |
 | 收藏操作缺少第四个参数 | 当前 `addOrDelFavorite` 只接收三个参数 |
+
+
+正文图片配置新增可选 `cropBands: [{top, bottom}, ...]`，以及图片脚本的
+`Image.getPixel(x,y)` / `Image.removeHorizontalBands(bands)`。
+坐标为原图高度比例；完整契约及缓存限制见 [通用图片裁切](../development/source_image_cropping.zh.md)。

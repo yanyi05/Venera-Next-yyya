@@ -14,8 +14,6 @@ import 'package:venera_next/routing/app_navigation.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/features/comic_source/comic_source.dart';
-import 'package:venera_next/features/comic_source/comic_source_page.dart'
-    show openSourceWebLogin;
 import 'package:venera_next/foundation/global_state.dart';
 import 'package:venera_next/foundation/res.dart';
 import 'package:venera_next/routing/page_jump_target.dart';

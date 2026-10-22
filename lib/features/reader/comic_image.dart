@@ -41,6 +41,7 @@ class ComicImage extends StatefulWidget {
     int? cacheHeight,
     this.onInit,
     this.onDispose,
+    this.onRetry,
   }) : image = ResizeImage.resizeIfNeeded(cacheWidth, cacheHeight, image),
        assert(cacheWidth == null || cacheWidth > 0),
        assert(cacheHeight == null || cacheHeight > 0);
@@ -86,6 +87,7 @@ class ComicImage extends StatefulWidget {
   final void Function(State<ComicImage> state)? onInit;
 
   final void Function(State<ComicImage> state)? onDispose;
+  final VoidCallback? onRetry;
 
   static void clear() => ComicImageState.clear();
 
@@ -375,6 +377,7 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
                         _lastException = null;
                       });
                       _resolveImage();
+                      widget.onRetry?.call();
                     },
                     child: SizedBox(
                       width: 84,
@@ -507,7 +510,9 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
                             rectangles: masks,
                             color: ReaderImageMasks.readColor(maskAddress),
                             fit: widget.fit ?? BoxFit.scaleDown,
-                            alignment: widget.alignment.resolve(Directionality.maybeOf(context)),
+                            alignment: widget.alignment.resolve(
+                              Directionality.maybeOf(context),
+                            ),
                             split: shouldSplit,
                             splitInvert: widget.splitWideImageInvert,
                             matchTextDirection: widget.matchTextDirection,
@@ -596,9 +601,14 @@ class _ReaderMaskPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final displaySize = split ? splitWideImageDisplaySize(imageSize) : imageSize;
+    final displaySize = split
+        ? splitWideImageDisplaySize(imageSize)
+        : imageSize;
     final fitted = applyBoxFit(fit, displaySize, size);
-    final destination = alignment.inscribe(fitted.destination, Offset.zero & size);
+    final destination = alignment.inscribe(
+      fitted.destination,
+      Offset.zero & size,
+    );
     final paint = Paint()..color = color;
     if (!split) {
       for (final rect in rectangles) {
@@ -615,7 +625,9 @@ class _ReaderMaskPainter extends CustomPainter {
       return;
     }
     final slices = splitWideImageSlices(
-      invert: splitInvert ^ (matchTextDirection && textDirection == TextDirection.rtl),
+      invert:
+          splitInvert ^
+          (matchTextDirection && textDirection == TextDirection.rtl),
     );
     for (final rect in rectangles) {
       for (final slice in slices) {
@@ -626,10 +638,16 @@ class _ReaderMaskPainter extends CustomPainter {
         if (clippedRight <= clippedLeft) continue;
         canvas.drawRect(
           Rect.fromLTRB(
-            destination.left + ((clippedLeft - left) / slice.sourceWidth) * destination.width,
-            destination.top + (slice.displayTop + rect.top * slice.displayHeight) * destination.height,
-            destination.left + ((clippedRight - left) / slice.sourceWidth) * destination.width,
-            destination.top + (slice.displayTop + rect.bottom * slice.displayHeight) * destination.height,
+            destination.left +
+                ((clippedLeft - left) / slice.sourceWidth) * destination.width,
+            destination.top +
+                (slice.displayTop + rect.top * slice.displayHeight) *
+                    destination.height,
+            destination.left +
+                ((clippedRight - left) / slice.sourceWidth) * destination.width,
+            destination.top +
+                (slice.displayTop + rect.bottom * slice.displayHeight) *
+                    destination.height,
           ),
           paint,
         );

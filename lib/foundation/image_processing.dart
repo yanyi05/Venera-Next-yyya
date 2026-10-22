@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'image_crop_bands.dart';
 import 'dart:collection';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -167,6 +168,27 @@ class Image {
     _copyRows(x, y, image, srcX, srcY, width, height);
   }
 
+  Image removeHorizontalBands(Object? bands) {
+    final rows = retainedImageRows(bands, height);
+    final outputHeight = rows.fold<int>(0, (sum, r) => sum + r.bottom - r.top);
+    if (outputHeight < 1) throw const FormatException('Empty crop result');
+    final result = Image.empty(width, outputHeight);
+    var y = 0;
+    for (final row in rows) {
+      result.fillImageRangeAt(
+        0,
+        y,
+        this,
+        0,
+        row.top,
+        width,
+        row.bottom - row.top,
+      );
+      y += row.bottom - row.top;
+    }
+    return result;
+  }
+
   Image copyAndRotate90() {
     var data = Uint32List(width * height);
     for (var j = 0; j < height; j++) {
@@ -276,6 +298,25 @@ class _ImageScriptBridge {
           var height = message['height'];
           var newImage = image.copyRange(x, y, width, height);
           return setImage(newImage);
+        case 'getPixel':
+          final image = images[message['key']];
+          if (image == null) return null;
+          final x = message['x'];
+          final y = message['y'];
+          if (x is! int ||
+              y is! int ||
+              x < 0 ||
+              x >= image.width ||
+              y < 0 ||
+              y >= image.height) {
+            throw RangeError('Pixel coordinates are outside the image');
+          }
+          final color = image.getPixelAtIndex(y * image.width + x);
+          return {'r': color.r, 'g': color.g, 'b': color.b, 'a': color.a};
+        case 'removeHorizontalBands':
+          final image = images[message['key']];
+          if (image == null) return null;
+          return setImage(image.removeHorizontalBands(message['bands']));
         case 'copyAndRotate90':
           var key = message['key'];
           var image = images[key];

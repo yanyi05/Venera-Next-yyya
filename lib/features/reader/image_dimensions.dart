@@ -16,14 +16,21 @@ class ReaderImageDimensions extends StatefulWidget {
     required this.image,
     this.child,
     this.builder,
+    this.sizeBuilder,
     this.showDimensions = true,
     this.onLoadState,
-  }) : assert((child == null) != (builder == null));
+  }) : assert(
+         (child == null ? 0 : 1) +
+                 (builder == null ? 0 : 1) +
+                 (sizeBuilder == null ? 0 : 1) ==
+             1,
+       );
   final ImageProvider image;
   final bool showDimensions;
   final ValueChanged<AutoReadingImageState>? onLoadState;
   final Widget? child;
   final Widget Function(VoidCallback reload)? builder;
+  final Widget Function(Size? size, VoidCallback reload)? sizeBuilder;
 
   @override
   State<ReaderImageDimensions> createState() => _ReaderImageDimensionsState();
@@ -100,7 +107,10 @@ class _ReaderImageDimensionsState extends State<ReaderImageDimensions> {
   @override
   Widget build(BuildContext context) => ImageDimensionsOverlay(
     size: widget.showDimensions ? _size : null,
-    child: widget.builder?.call(_reload) ?? widget.child!,
+    child:
+        widget.sizeBuilder?.call(_size, _reload) ??
+        widget.builder?.call(_reload) ??
+        widget.child!,
   );
 }
 

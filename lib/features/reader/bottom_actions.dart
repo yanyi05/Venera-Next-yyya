@@ -34,7 +34,7 @@ List<Widget> buildReaderBottomActions(
   required VoidCallback onSave,
   required VoidCallback onShare,
   VoidCallback? onEditImageMask,
-  VoidCallback? onEditBaoziBannerCrop,
+  VoidCallback? onEditImageBannerCrop,
   VoidCallback? onRevalidateImage,
   VoidCallback? onVerifySourceCookie,
 }) {
@@ -148,13 +148,13 @@ List<Widget> buildReaderBottomActions(
           onPressed: onEditImageMask,
         ),
       ),
-    if (onEditBaoziBannerCrop != null)
+    if (onEditImageBannerCrop != null)
       Tooltip(
-        message: '预览或调整包子横幅裁切',
+        message: '移除图片横向区域',
         child: IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(Icons.crop),
-          onPressed: onEditBaoziBannerCrop,
+          onPressed: onEditImageBannerCrop,
         ),
       ),
     if (onRevalidateImage != null)

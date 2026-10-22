@@ -92,6 +92,24 @@ void main() {
     expect(pixels(rotated), [5, 3, 1, 6, 4, 2]);
   });
 
+  test('native source image operation removes multiple bands losslessly', () {
+    final source = processing.Image(
+      Uint32List.fromList(List.generate(100, (i) => i)),
+      1,
+      100,
+    );
+    final output = source.removeHorizontalBands([
+      {'top': .1, 'bottom': .2},
+      {'top': .8, 'bottom': .9},
+    ]);
+    expect(output.height, 80);
+    expect(pixels(output), [
+      for (var i = 0; i < 100; i++)
+        if (!(i >= 10 && i < 20) && !(i >= 80 && i < 90)) i,
+    ]);
+    expect(pixels(source), List.generate(100, (i) => i));
+  });
+
   test('out of bounds rectangles fail without writing the destination', () {
     final target = processing.Image.empty(3, 3);
     final source = processing.Image.empty(2, 2);

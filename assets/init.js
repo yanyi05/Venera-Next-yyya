@@ -1135,13 +1135,14 @@ function Comment({userName, avatar, content, time, replyCount, id, isLiked, scor
  *
  * To keep the compatibility with the old version, do not use the constructor. Consider creating a new object with the properties directly.
  */
-function ImageLoadingConfig({url, method, data, headers, onResponse, modifyImage, onLoadFailed}) {
+function ImageLoadingConfig({url, method, data, headers, onResponse, modifyImage, onLoadFailed, cropBands}) {
     this.url = url;
     this.method = method;
     this.data = data;
     this.headers = headers;
     this.onResponse = onResponse;
     this.modifyImage = modifyImage;
+    this.cropBands = cropBands;
     this.onLoadFailed = onLoadFailed;
 }
 
@@ -1311,6 +1312,19 @@ class Image {
         })
         if(key == null) return null;
         return new Image(key);
+    }
+
+    /** Read one pixel as {r, g, b, a}, each component in 0..255. */
+    getPixel(x, y) {
+        return sendMessage({method: 'image', function: 'getPixel',
+            key: this.key, x: x, y: y});
+    }
+
+    /** Remove normalized full-width bands against this input image. */
+    removeHorizontalBands(bands) {
+        const key = sendMessage({method: 'image', function: 'removeHorizontalBands',
+            key: this.key, bands: bands});
+        return key == null ? null : new Image(key);
     }
 
     /**

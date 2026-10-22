@@ -7,6 +7,9 @@ import 'package:flutter_qjs/flutter_qjs.dart';
 import 'package:venera_next/foundation/cache_manager.dart';
 import 'package:venera_next/foundation/consts.dart';
 import 'package:venera_next/foundation/image_processing.dart';
+import 'package:venera_next/foundation/image_crop_bands.dart';
+import 'package:venera_next/foundation/image_band_transform.dart';
+import 'dart:ui' show Rect;
 
 import 'app_dio.dart';
 import 'image_http_client.dart';
@@ -444,6 +447,10 @@ abstract class ImageDownloader {
               buffer.clear();
             }
 
+            // Preserve source bytes after transport decoding, before visual edits.
+            scope?.check();
+            await CacheManager().writeCache('$cacheKey@original', data);
+            scope?.check();
             if (configs['modifyImage'] != null) {
               var newData = await modifyImageWithScript(
                 data,
@@ -452,6 +459,14 @@ abstract class ImageDownloader {
               data = newData;
             }
 
+            final bands = configs['cropBands'];
+            if (bands != null) {
+              final normalized = normalizeImageCropBands(bands);
+              data = await cropImageBannerBands(data, [
+                for (final b in normalized)
+                  Rect.fromLTRB(0, b.top, 1, b.bottom),
+              ]);
+            }
             scope?.check();
             await CacheManager().writeCache(cacheKey, data);
             scope?.check();

@@ -10,7 +10,7 @@ import 'image_position.dart';
 /// Persistent, per-image display masks. The original image and its cache entry
 /// are never modified.
 abstract final class ReaderImageMasks {
-  static final changes = ChangeNotifier();
+  static final changes = _ImageChanges();
   static const _settingKey = 'readerImageMasks';
 
   static String _key(ReaderImageAddress address) =>
@@ -68,7 +68,7 @@ abstract final class ReaderImageMasks {
       values.remove(key);
     } else {
       values[key] = {
-        'color': color.value,
+        'color': color.toARGB32(),
         'rectangles': [
           for (final rect in rectangles)
             {
@@ -83,6 +83,10 @@ abstract final class ReaderImageMasks {
     await appdata.updateSettings((settings) {
       settings[_settingKey] = values;
     });
-    changes.notifyListeners();
+    changes.notifyChanged();
   }
+}
+
+class _ImageChanges extends ChangeNotifier {
+  void notifyChanged() => notifyListeners();
 }

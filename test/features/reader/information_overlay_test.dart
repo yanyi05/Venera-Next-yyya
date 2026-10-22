@@ -282,6 +282,7 @@ class _Fixture {
                 data: ReaderShellData(
                   comicId: 'book',
                   sourceKey: 'local',
+                  chapterId: 'chapter-1',
                   title: 'Book',
                   chapterTitle: 'A very long chapter title',
                   hasChapters: true,
@@ -323,6 +324,8 @@ class _Fixture {
                 createFavoriteQuery: () => null,
                 createImageFavorite: () => null,
                 createImageExport: () => null,
+                revalidateImage: (_) async {},
+                refreshImageProcessing: (_) async {},
                 createSettings: () => null,
                 createChapterComments: () => null,
                 chapterNavigation: null,

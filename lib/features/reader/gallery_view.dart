@@ -159,14 +159,7 @@ class GalleryModeState extends State<ReaderGalleryView>
     }
     final (start, end) = getPageImagesRange(page);
     if (end - start == 1) {
-      final observed = data.showImageDimensions || data.observeImageReadiness;
-      return result(
-        observed
-            ? _singleImageStates[page] ?? AutoReadingImageState.loading
-            : initialScale == null
-            ? AutoReadingImageState.loading
-            : AutoReadingImageState.ready,
-      );
+      return result(_singleImageStates[page] ?? AutoReadingImageState.loading);
     }
     final visible = imageStates.entries
         .where((entry) => entry.value >= start && entry.value < end)
@@ -374,36 +367,36 @@ class GalleryModeState extends State<ReaderGalleryView>
             comicId: data.comicId,
             chapterId: data.chapterId,
           );
-          Widget photo([VoidCallback? _]) => PhotoView.customChild(
-            backgroundDecoration: decoration,
-            filterQuality: FilterQuality.medium,
-            controller: controller,
-            childSize: MediaQuery.sizeOf(context),
-            minScale: PhotoViewComputedScale.contained * 1.0,
-            maxScale: PhotoViewComputedScale.covered * 10.0,
-            child: ComicImage(
-              width: double.infinity,
-              height: double.infinity,
-              image: image,
-              fit: BoxFit.contain,
-              maskAddress: address,
-            ),
-          );
-          return data.showImageDimensions || data.observeImageReadiness
-              ? ReaderImageDimensions(
+          Widget photo(Size? size, VoidCallback reload) =>
+              PhotoView.customChild(
+                backgroundDecoration: decoration,
+                filterQuality: FilterQuality.medium,
+                controller: controller,
+                childSize: size ?? MediaQuery.sizeOf(context),
+                minScale: PhotoViewComputedScale.contained * 1.0,
+                maxScale: PhotoViewComputedScale.covered * 10.0,
+                child: ComicImage(
+                  width: double.infinity,
+                  height: double.infinity,
                   image: image,
-                  showDimensions: data.showImageDimensions,
-                  onLoadState: (state) {
-                    if (mounted &&
-                        !_disposed &&
-                        identical(originalContent, data.content) &&
-                        identical(originalWork, widget.imageWork)) {
-                      _singleImageStates[index] = state;
-                    }
-                  },
-                  builder: photo,
-                )
-              : photo();
+                  fit: BoxFit.contain,
+                  maskAddress: address,
+                  onRetry: reload,
+                ),
+              );
+          return ReaderImageDimensions(
+            image: image,
+            showDimensions: data.showImageDimensions,
+            onLoadState: (state) {
+              if (mounted &&
+                  !_disposed &&
+                  identical(originalContent, data.content) &&
+                  identical(originalWork, widget.imageWork)) {
+                _singleImageStates[index] = state;
+              }
+            },
+            sizeBuilder: photo,
+          );
         }
         return PhotoView.customChild(
           backgroundDecoration: decoration,

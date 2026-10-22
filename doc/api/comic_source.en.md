@@ -393,3 +393,9 @@ Read-only calls can retry twice after certain transient JSON/network errors; do 
 | Follow checks never detect changes | Valid real update date; changes confined to the same day |
 | Wrong chapter order or transitions | Integer-like keys, duplicate chapter IDs, group order, and image order |
 | Missing fourth favorite argument | Current `addOrDelFavorite` receives three arguments |
+
+
+Comic image configs accept optional `cropBands: [{top, bottom}, ...]`.
+Image scripts support `image.getPixel(x,y)` and `image.removeHorizontalBands(bands)`.
+Bands use normalized input-image coordinates, merge overlaps and remove at most 30%.
+See the [cropping contract](../development/source_image_cropping.zh.md) for cache and restore behavior.

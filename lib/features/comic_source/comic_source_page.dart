@@ -42,7 +42,10 @@ import 'source_mutation_failure.dart';
 
 /// Opens a source's existing web login flow from browsing or reader pages.
 /// A successful verification captures the current cookies and source storage.
-Future<void> openSourceWebLogin(BuildContext context, ComicSource source) async {
+Future<void> openSourceWebLogin(
+  BuildContext context,
+  ComicSource source,
+) async {
   if (source.account?.loginWebsite == null ||
       !identical(ComicSource.find(source.key), source) ||
       !NavigationAdmission.allows(context)) {
@@ -1315,7 +1318,11 @@ class _LoginPageState extends SettingsSaveState<_LoginPage> {
 }
 
 class SourceWebLoginPage extends StatefulWidget {
-  const SourceWebLoginPage({required this.source, required this.cookieJar});
+  const SourceWebLoginPage({
+    super.key,
+    required this.source,
+    required this.cookieJar,
+  });
   final ComicSource source;
   final CookieJarSql cookieJar;
   @override

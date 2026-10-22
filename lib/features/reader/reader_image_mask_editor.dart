@@ -69,8 +69,12 @@ class _ReaderImageMaskEditorState extends State<ReaderImageMaskEditor> {
   Offset? _normalized(Offset point) {
     if (!_imageRect.contains(point)) return null;
     return Offset(
-      ((point.dx - _imageRect.left) / _imageRect.width).clamp(0.0, 1.0).toDouble(),
-      ((point.dy - _imageRect.top) / _imageRect.height).clamp(0.0, 1.0).toDouble(),
+      ((point.dx - _imageRect.left) / _imageRect.width)
+          .clamp(0.0, 1.0)
+          .toDouble(),
+      ((point.dy - _imageRect.top) / _imageRect.height)
+          .clamp(0.0, 1.0)
+          .toDouble(),
     );
   }
 
@@ -83,7 +87,9 @@ class _ReaderImageMaskEditorState extends State<ReaderImageMaskEditor> {
           child: Center(child: Text('Unable to open image: $error')),
         );
       }
-      return const Dialog.fullscreen(child: Center(child: CircularProgressIndicator()));
+      return const Dialog.fullscreen(
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
     return Dialog.fullscreen(
       child: SafeArea(
@@ -108,13 +114,19 @@ class _ReaderImageMaskEditorState extends State<ReaderImageMaskEditor> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final size = Size(constraints.maxWidth, constraints.maxHeight);
+                  final size = Size(
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  );
                   final fitted = applyBoxFit(
                     BoxFit.contain,
                     Size(image.width.toDouble(), image.height.toDouble()),
                     size,
                   );
-                  _imageRect = Alignment.center.inscribe(fitted.destination, Offset.zero & size);
+                  _imageRect = Alignment.center.inscribe(
+                    fitted.destination,
+                    Offset.zero & size,
+                  );
                   return GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onPanStart: (details) {
@@ -135,7 +147,9 @@ class _ReaderImageMaskEditorState extends State<ReaderImageMaskEditor> {
                     },
                     onPanEnd: (_) {
                       final drag = _drag;
-                      if (drag != null && drag.width > .005 && drag.height > .005) {
+                      if (drag != null &&
+                          drag.width > .005 &&
+                          drag.height > .005) {
                         setState(() => _rectangles.add(drag));
                       }
                       setState(() {
@@ -147,7 +161,7 @@ class _ReaderImageMaskEditorState extends State<ReaderImageMaskEditor> {
                       painter: _MaskPreviewPainter(
                         image: image,
                         imageRect: _imageRect,
-                        rectangles: [..._rectangles, if (_drag != null) _drag!],
+                        rectangles: [..._rectangles, ?_drag],
                         color: _maskColor,
                       ),
                       child: const SizedBox.expand(),
@@ -172,12 +186,16 @@ class _ReaderImageMaskEditorState extends State<ReaderImageMaskEditor> {
                   ),
                   const Spacer(),
                   TextButton.icon(
-                    onPressed: _rectangles.isEmpty ? null : () => setState(_rectangles.clear),
+                    onPressed: _rectangles.isEmpty
+                        ? null
+                        : () => setState(_rectangles.clear),
                     icon: const Icon(Icons.delete_outline),
                     label: const Text('清除全部'),
                   ),
                   TextButton.icon(
-                    onPressed: _rectangles.isEmpty ? null : () => setState(_rectangles.removeLast),
+                    onPressed: _rectangles.isEmpty
+                        ? null
+                        : () => setState(_rectangles.removeLast),
                     icon: const Icon(Icons.undo),
                     label: const Text('撤销'),
                   ),

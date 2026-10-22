@@ -60,6 +60,7 @@ void main() {
       ReaderShellData data() => ReaderShellData(
         comicId: 'synthetic',
         sourceKey: 'local',
+        chapterId: 'chapter-1',
         title: 'An illustrated journey through the mountains',
         chapterTitle: 'Chapter $chapter: a new beginning',
         hasChapters: true,
@@ -136,6 +137,8 @@ void main() {
                       createFavoriteQuery: () => null,
                       createImageFavorite: () => null,
                       createImageExport: () => null,
+                      revalidateImage: (_) async {},
+                      refreshImageProcessing: (_) async {},
                       createSettings: () => null,
                       createChapterComments: () => null,
                       chapterNavigation: null,
