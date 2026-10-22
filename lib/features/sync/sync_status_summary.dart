@@ -93,43 +93,51 @@ class SyncStatusSummary extends StatelessWidget {
                       ),
                     ),
                   ).paddingRight(4),
-                IconButton(
-                  icon: const Icon(Icons.cloud_upload_outlined),
-                  tooltip: 'Upload'.tl,
-                  onPressed: () async {
-                    controller.uploadData();
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  tooltip: 'Download'.tl,
-                  onPressed: () async {
-                    if (controller.hasPendingChanges) {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text('Overwrite local data?'.tl),
-                          content: Text(
-                            'Local changes will be overwritten by the downloaded backup. Continue?'
-                                .tl,
+                if (controller.mergesRecords)
+                  IconButton(
+                    icon: const Icon(Icons.sync),
+                    tooltip: 'Sync Data'.tl,
+                    onPressed: () => controller.uploadData(),
+                  )
+                else ...[
+                  IconButton(
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    tooltip: 'Upload'.tl,
+                    onPressed: () async {
+                      controller.uploadData();
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.cloud_download_outlined),
+                    tooltip: 'Download'.tl,
+                    onPressed: () async {
+                      if (controller.hasPendingChanges) {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text('Overwrite local data?'.tl),
+                            content: Text(
+                              'Local changes will be overwritten by the downloaded backup. Continue?'
+                                  .tl,
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: context.pop,
+                                child: Text('Cancel'.tl),
+                              ),
+                              FilledButton(
+                                onPressed: () => context.pop(true),
+                                child: Text('Download'.tl),
+                              ),
+                            ],
                           ),
-                          actions: [
-                            TextButton(
-                              onPressed: context.pop,
-                              child: Text('Cancel'.tl),
-                            ),
-                            FilledButton(
-                              onPressed: () => context.pop(true),
-                              child: Text('Download'.tl),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirmed != true || !context.mounted) return;
-                    }
-                    await controller.downloadData(force: true);
-                  },
-                ),
+                        );
+                        if (confirmed != true || !context.mounted) return;
+                      }
+                      await controller.downloadData(force: true);
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -147,6 +155,9 @@ class SyncStatusSummary extends StatelessWidget {
     if (status.isDownloading) return 'Downloading data...'.tl;
     if (status.lastError != null) {
       return '${'Last sync failed'.tl}: ${status.lastError}';
+    }
+    if (status.hasPendingChanges) {
+      return 'Local changes saved; waiting to sync'.tl;
     }
     if (status.lastSyncTime <= 0) return 'Not synced yet'.tl;
     return '${'Last synced'.tl}: ${status.formattedLastSyncTime}';

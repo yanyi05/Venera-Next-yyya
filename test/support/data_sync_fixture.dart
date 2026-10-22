@@ -17,6 +17,8 @@ class SyncTestFixture {
     DateTime Function()? now,
     Timer Function(Duration, void Function())? createTimer,
     DataSyncImportRecovery? importRecovery,
+    bool useV117WebDav = false,
+    bool reliableAutomaticSync = false,
   }) {
     final settings = <String, dynamic>{
       'webdav': ['https://example.com/dav', 'user', 'password'],
@@ -37,6 +39,8 @@ class SyncTestFixture {
       now: now,
       createTimer: createTimer,
       importRecovery: importRecovery,
+      useV117WebDav: useV117WebDav,
+      reliableAutomaticSync: reliableAutomaticSync,
     );
   }
 

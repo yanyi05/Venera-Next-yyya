@@ -269,6 +269,27 @@ class Appdata with Init {
   AppdataImportCheckpoint captureImportCheckpoint() =>
       AppdataImportCheckpoint._(jsonEncode(toJson()));
 
+  /// Record synchronization has explicit deletion evidence, unlike a legacy
+  /// archive whose missing settings only mean "not included in this backup".
+  Future<void> applyRecordSyncSettings(
+    Map<String, dynamic> values, {
+    required Set<String> localFields,
+  }) {
+    final snapshot = jsonEncode(values);
+    final excluded = Set<String>.of(localFields);
+    return _edit((draft, _) {
+      final intended = jsonDecode(snapshot) as Map<String, dynamic>;
+      draft._data.removeWhere(
+        (key, value) => !excluded.contains(key) && !intended.containsKey(key),
+      );
+      for (final entry in intended.entries) {
+        if (!excluded.contains(entry.key)) {
+          draft[entry.key] = entry.value;
+        }
+      }
+    }, sync: false);
+  }
+
   /// Restore every imported setting, including removal of newly introduced
   /// keys, before acknowledging that an archive rollback has completed.
   Future<void> restoreImportCheckpoint(

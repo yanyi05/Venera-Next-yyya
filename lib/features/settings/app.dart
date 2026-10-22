@@ -325,7 +325,12 @@ class _WebdavSettingState extends State<_WebdavSetting> {
                     setState(() => syncInterval = value),
               ),
               const SizedBox(height: 12),
-              if (syncMode != DataSyncMode.manual) ...[
+              if (DataSyncScope.of(context).mergesRecords)
+                Text(
+                  'Records from both devices are merged. Use the same app version on every device.'
+                      .tl,
+                )
+              else if (syncMode != DataSyncMode.manual) ...[
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text('Initial sync'.tl),

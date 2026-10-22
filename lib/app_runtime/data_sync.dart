@@ -9,6 +9,9 @@ import 'data_sync_transfer.dart';
 import 'data_sync_content.dart';
 import 'package:venera_next/features/sync/data_sync_ownership.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/features/history/history_manager.dart';
+import 'package:venera_next/features/history/image_favorites.dart';
+import 'record_data_sync.dart';
 
 /// Construction is inert. The application owns start/stop/dispose.
 DataSyncController createApplicationDataSync({
@@ -17,8 +20,8 @@ DataSyncController createApplicationDataSync({
   DataSyncUploadRecovery? uploadRecovery,
   bool useV117WebDav = true,
 }) {
-  // 默认恢复 v1.17.0 的 WebDAV 方案，不要求新协议的 ETag 或内容基线。
-  // RC 的上传／内容基线恢复记录和操作标记留在原处，不阻断稳定同步流程。
+  // 保留基本 WebDAV 兼容性，默认使用记录合并及持久补传，不要求 ETag。
+  // 旧 RC 恢复协议只在显式选择该分支时启用。
   final recovery = useV117WebDav
       ? null
       : importRecovery ?? createDataSyncImportRecovery();
@@ -27,10 +30,11 @@ DataSyncController createApplicationDataSync({
       : null;
   return DataSyncController(
     useV117WebDav: useV117WebDav,
+    reliableAutomaticSync: useV117WebDav,
     preferences: createAppSyncPreferences(appdata),
     transfer:
         transfer ??
-        () => useV117WebDav ? createV117DataSyncTransfer() : defaultTransfer!,
+        () => useV117WebDav ? RecordDataSyncTransfer() : defaultTransfer!,
     importRecovery: recovery,
     uploadRecovery: useV117WebDav ? null : uploadRecovery ?? defaultTransfer,
     content: useV117WebDav ? null : ApplicationDataSyncContent(),
@@ -44,18 +48,26 @@ DataSyncController createApplicationDataSync({
 void Function() _observeApplicationChanges(void Function() changed) {
   final favorites = LocalFavoritesManager();
   final sources = ComicSourceManager();
+  final history = HistoryManager();
+  final images = ImageFavoriteManager();
   favorites.addListener(changed);
   try {
     sources.addListener(changed);
+    history.addListener(changed);
+    images.addListener(changed);
     appdata.registerSyncDataRequestHandler(changed);
   } catch (_) {
     favorites.removeListener(changed);
     sources.removeListener(changed);
+    history.removeListener(changed);
+    images.removeListener(changed);
     rethrow;
   }
   return () {
     appdata.registerSyncDataRequestHandler(null);
     favorites.removeListener(changed);
     sources.removeListener(changed);
+    history.removeListener(changed);
+    images.removeListener(changed);
   };
 }

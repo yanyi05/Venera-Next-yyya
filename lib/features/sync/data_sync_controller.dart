@@ -44,6 +44,7 @@ class _SyncCompletion {
 class DataSyncStatusSnapshot {
   const DataSyncStatusSnapshot({
     this.isConfigured = false,
+    this.hasPendingChanges = false,
     required this.isEnabled,
     required this.isUploading,
     required this.isDownloading,
@@ -53,6 +54,7 @@ class DataSyncStatusSnapshot {
 
   final bool isEnabled;
   final bool isConfigured;
+  final bool hasPendingChanges;
   final bool isUploading;
   final bool isDownloading;
   final int lastSyncTime;
@@ -88,6 +90,7 @@ class DataSyncController with ChangeNotifier {
     DateTime Function()? now,
     Timer Function(Duration, void Function())? createTimer,
     bool useV117WebDav = false,
+    bool reliableAutomaticSync = false,
   }) : _syncPreferences = preferences,
        _transferFactory = transfer,
        _saveSettings = saveSettings,
@@ -98,6 +101,7 @@ class DataSyncController with ChangeNotifier {
        _content = content,
        _ownership = ownership,
        _useV117WebDav = useV117WebDav,
+       _reliableAutomaticSync = reliableAutomaticSync,
        _clock = now ?? DateTime.now,
        _createTimer = createTimer ?? Timer.new;
 
@@ -113,6 +117,9 @@ class DataSyncController with ChangeNotifier {
   final DataSyncContent? _content;
   final DataSyncOwnership? _ownership;
   final bool _useV117WebDav;
+  final bool _reliableAutomaticSync;
+  int _automaticFailures = 0;
+  bool _changeScheduled = false;
   bool _ownershipReady = false;
   bool _ownershipReleased = false;
   bool _disposalDrained = false;
@@ -197,6 +204,9 @@ class DataSyncController with ChangeNotifier {
     if (!_tryOwnership()) return;
     if (!hasPendingChanges) {
       _syncPreferences.pending = true;
+      if (_reliableAutomaticSync) {
+        notifyListeners();
+      }
       unawaited(
         Future<void>.sync(_persistState).catchError((
           Object error,
@@ -216,7 +226,13 @@ class DataSyncController with ChangeNotifier {
         !_exitHeld &&
         !_configuring) {
       if (_content == null) {
-        unawaited(uploadData());
+        if (_reliableAutomaticSync) {
+          if (!_changeScheduled && _activeTask == null) {
+            _scheduleReliable(const Duration(seconds: 5), changed: true);
+          }
+        } else {
+          unawaited(uploadData());
+        }
       } else {
         checkForAutomaticSync(startup: true);
       }
@@ -231,6 +247,7 @@ class DataSyncController with ChangeNotifier {
   bool get hasConfiguration => _validateConfig()?.isValid == true;
 
   bool get hasPendingChanges => _syncPreferences.pending;
+  bool get mergesRecords => _reliableAutomaticSync;
 
   Timer? _scheduleTimer;
   bool _disposed = false;
@@ -251,6 +268,7 @@ class DataSyncController with ChangeNotifier {
   void checkForAutomaticSync({bool startup = false}) {
     _scheduleTimer?.cancel();
     _scheduleTimer = null;
+    _changeScheduled = false;
     if (_hasRecovery && !_recoveryInitialized) {
       if (_started && !_disposed && !_exitHeld && !_automaticRecoveryWait) {
         _automaticRecoveryWait = true;
@@ -275,7 +293,8 @@ class DataSyncController with ChangeNotifier {
       return;
     }
     if (currentMode == DataSyncMode.realtime) {
-      if (!startup &&
+      if (!_reliableAutomaticSync &&
+          !startup &&
           _lastRealtimeCheck != null &&
           _now.difference(_lastRealtimeCheck!) < const Duration(minutes: 10)) {
         return;
@@ -290,7 +309,10 @@ class DataSyncController with ChangeNotifier {
       // A clock moved backwards must not delay syncing indefinitely.
       final elapsed = last == null ? interval : _now.difference(last);
       final remaining = interval - (elapsed.isNegative ? interval : elapsed);
-      if (remaining > Duration.zero) {
+      if (remaining > Duration.zero &&
+          !(startup &&
+              _reliableAutomaticSync &&
+              (hasPendingChanges || _automaticFailures > 0))) {
         _scheduleTimer = _createTimer(remaining, checkForAutomaticSync);
         return;
       }
@@ -312,6 +334,25 @@ class DataSyncController with ChangeNotifier {
     } else if (!_checkingContent) {
       unawaited(_checkAutomaticContent());
     }
+  }
+
+  void _scheduleReliable(Duration delay, {bool changed = false}) {
+    if (!_started || _disposed || _exitHeld || _configuring || !isEnabled) {
+      return;
+    }
+    _scheduleTimer?.cancel();
+    _changeScheduled = changed;
+    _scheduleTimer = _createTimer(delay, () {
+      _changeScheduled = false;
+      checkForAutomaticSync(startup: true);
+    });
+  }
+
+  /// Background delivery is best effort; durable local data is captured before
+  /// any remote merge on the next launch if the OS terminates this process.
+  Future<void> onBackground() async {
+    await flushPersistence();
+    if (_reliableAutomaticSync) checkForAutomaticSync(startup: true);
   }
 
   Future<void> _checkAutomaticContent() async {
@@ -531,7 +572,11 @@ class DataSyncController with ChangeNotifier {
         if (!_disposed) {
           _lastError = result.errorMessage;
           _lastRealtimeCheck = _now;
-          if (currentMode == DataSyncMode.scheduled) checkForAutomaticSync();
+          if (_reliableAutomaticSync) {
+            _scheduleReliable(const Duration(seconds: 5));
+          } else if (currentMode == DataSyncMode.scheduled) {
+            checkForAutomaticSync();
+          }
           notifyListeners();
         }
       }
@@ -648,6 +693,7 @@ class DataSyncController with ChangeNotifier {
   }
 
   DataSyncStatusSnapshot get statusSnapshot => DataSyncStatusSnapshot(
+    hasPendingChanges: hasPendingChanges,
     isConfigured: hasConfiguration,
     isEnabled: isEnabled,
     isUploading: _isUploading,
@@ -1186,6 +1232,23 @@ class DataSyncController with ChangeNotifier {
         ).whenComplete(() {
           if (identical(_activeTask, activeTask)) {
             _activeTask = null;
+            if (_reliableAutomaticSync && _pendingTask == null) {
+              final delay = _lastError != null
+                  ? Duration(
+                      seconds: (5 * (1 << _automaticFailures.clamp(0, 6)))
+                          .clamp(5, 300),
+                    )
+                  : hasPendingChanges
+                  ? const Duration(seconds: 5)
+                  : currentMode == DataSyncMode.realtime
+                  ? const Duration(seconds: 60)
+                  : Duration(minutes: currentIntervalMinutes);
+              _scheduleReliable(
+                delay,
+                changed: hasPendingChanges || _lastError != null,
+              );
+              return;
+            }
             if (currentMode == DataSyncMode.scheduled && _pendingTask == null) {
               checkForAutomaticSync();
             } else if (_started &&
@@ -1346,16 +1409,20 @@ class DataSyncController with ChangeNotifier {
       final result = await run();
       if (result.error) {
         _lastError = result.errorMessage;
+        if (_reliableAutomaticSync) _automaticFailures++;
       } else if (hasConfiguration &&
           generation == _changeGeneration &&
-          (task == _DataSyncTask.upload ||
+          (_reliableAutomaticSync ||
+              task == _DataSyncTask.upload ||
               _lastCommitState == DataSyncCommitState.applied)) {
         _syncPreferences.pending = false;
       }
+      if (result.success) _automaticFailures = 0;
       if (saveConfiguration && result.success) await _persistConfiguration();
       return result;
     } catch (error, stack) {
       Log.error(_taskLogTag(task), error, stack);
+      if (_reliableAutomaticSync) _automaticFailures++;
       final result = Res<bool>.fromException(error, stack);
       _lastError = result.errorMessage;
       return result;
@@ -1641,12 +1708,22 @@ class DataSyncController with ChangeNotifier {
     final scope = RequestScope();
     _transferScope = scope;
     try {
-      await _dataTransfer.upload(
-        config,
-        excludeFields: _syncPreferences.configuration.excludedFields.isNotEmpty,
-        scope: scope,
-        syncOperationId: _ownedOperation?.id,
-      );
+      final transfer = _dataTransfer;
+      if (transfer is MergingDataSyncTransfer) {
+        await transfer.uploadMerged(
+          config,
+          scope: scope,
+          publishImported: _publishImported,
+        );
+      } else {
+        await transfer.upload(
+          config,
+          excludeFields:
+              _syncPreferences.configuration.excludedFields.isNotEmpty,
+          scope: scope,
+          syncOperationId: _ownedOperation?.id,
+        );
+      }
       _lastCommitState = DataSyncCommitState.applied;
       Log.info("Upload Data", "Data uploaded successfully");
       return const Res(true);

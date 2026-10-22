@@ -1,5 +1,7 @@
 {
   "zh_CN": {
+    "Local changes saved; waiting to sync": "本地改动已保存，等待同步",
+    "Records from both devices are merged. Use the same app version on every device.": "同步会合并两端记录。请在所有设备上使用相同版本的应用。",
     "Connection interrupted. Waiting to retry...": "连接中断，等待自动重试…",
     "Download error": "下载错误",
     "Error details": "错误详情",

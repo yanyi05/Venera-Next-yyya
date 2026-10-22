@@ -226,8 +226,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (widget.host.isClosing) return;
     if (state == AppLifecycleState.resumed) {
-      _dataSync.checkForAutomaticSync();
+      _dataSync.checkForAutomaticSync(startup: true);
       _library.source.synchronizer.checkForAutomaticSync();
+    }
+    if (state == AppLifecycleState.paused) {
+      unawaited(
+        _dataSync.onBackground().catchError((Object error, StackTrace stack) {
+          Log.error('Data Sync background', error, stack);
+        }),
+      );
     }
     if (!App.isMobile ||
         !GlobalPreferenceStore(

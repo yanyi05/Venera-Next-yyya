@@ -56,6 +56,15 @@ abstract interface class DataSyncTransfer {
   });
 }
 
+/// Uploads that also merge remote records publish only their own import events.
+abstract interface class MergingDataSyncTransfer implements DataSyncTransfer {
+  Future<void> uploadMerged(
+    WebDavEndpoint connection, {
+    required RequestScope scope,
+    required void Function(void Function()) publishImported,
+  });
+}
+
 class DataSyncArchiveNotFound implements Exception {
   const DataSyncArchiveNotFound();
 
