@@ -54,8 +54,8 @@ List<int>? _findBaoziBannerBand(Uint8List bytes) {
       final bandHeight = end - start;
       if (bandHeight >= (height * 0.025).round() &&
           bandHeight <= (height * 0.20).round() &&
-          start >= height * 0.12 &&
-          height - end >= height * 0.12 &&
+          (start <= height * 0.03 || start >= height * 0.12) &&
+          (height - end <= height * 0.03 || height - end >= height * 0.12) &&
           _hasBaoziLogoAndText(decoded, start, end, xStep)) {
         return [start, end, height];
       }
@@ -73,14 +73,24 @@ Uint8List _cropBaoziBannerBand(List<dynamic> args) {
     final height = decoded.height;
     final top = ((args[1] as double) * height).round().clamp(0, height).toInt();
     final end = ((args[2] as double) * height).round().clamp(0, height).toInt();
-    if (top < height * 0.12 || end > height * 0.88 || end - top < height * 0.005) {
+    // Manual selections may touch the top or bottom edge (Baozi often places
+    // its banner there). Keep bounds checks, but don't reject edge selections.
+    final cropHeight = end - top;
+    if (top < 0 || end > height ||
+        cropHeight < height * 0.005 ||
+        cropHeight > height * 0.30 ||
+        height - cropHeight < height * 0.50) {
       return bytes;
     }
     final result = img.Image(width: decoded.width, height: height - (end - top));
-    final upper = img.copyCrop(decoded, x: 0, y: 0, width: decoded.width, height: top);
-    final lower = img.copyCrop(decoded, x: 0, y: end, width: decoded.width, height: height - end);
-    img.compositeImage(result, upper, dstX: 0, dstY: 0);
-    img.compositeImage(result, lower, dstX: 0, dstY: top);
+    if (top > 0) {
+      final upper = img.copyCrop(decoded, x: 0, y: 0, width: decoded.width, height: top);
+      img.compositeImage(result, upper, dstX: 0, dstY: 0);
+    }
+    if (end < height) {
+      final lower = img.copyCrop(decoded, x: 0, y: end, width: decoded.width, height: height - end);
+      img.compositeImage(result, lower, dstX: 0, dstY: top);
+    }
     return Uint8List.fromList(img.encodeJpg(result, quality: 94));
   } catch (_) {
     return bytes;
