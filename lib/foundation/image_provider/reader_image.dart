@@ -11,6 +11,8 @@ import 'package:venera_next/network/image_stream.dart';
 import 'base_image_provider.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/features/reader/baozi_banner_filter.dart';
+import 'package:venera_next/features/reader/image_position.dart';
+import 'package:venera_next/features/reader/reader_image_banner_crops.dart';
 
 class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
   /// Image provider for normal image.
@@ -80,6 +82,21 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
       throw OperationFailure.message("Error: Empty response body.");
     }
     checkStop();
+    final isBaoziRemote = !imageKey.startsWith('file://') &&
+        (sourceKey == 'baozi' || isBaoziComicImage(imageKey));
+    final address = ReaderImageAddress(
+      imageKey: imageKey,
+      sourceKey: sourceKey,
+      comicId: cid,
+      chapterId: eid,
+    );
+    final manualBand = isBaoziRemote
+        ? ReaderImageBannerCrops.read(address)
+        : null;
+    if (manualBand != null) {
+      imageBytes = await cropBaoziBannerBand(imageBytes, manualBand);
+      checkStop();
+    }
     if (GlobalPreferenceStore(
       appdata.settings,
     ).read(ImageProcessingPreferences.enabled)) {
@@ -99,8 +116,7 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
         );
       }
     }
-    if (!imageKey.startsWith('file://') &&
-    (sourceKey == 'baozi' || isBaoziComicImage(imageKey))) {
+    if (isBaoziRemote && manualBand == null) {
       checkStop();
       imageBytes = await removeBaoziBanner(imageBytes);
       checkStop();

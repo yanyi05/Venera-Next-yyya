@@ -38,6 +38,9 @@ import 'package:venera_next/features/reader/image_position.dart';
 import 'package:venera_next/features/reader/image_read.dart';
 import 'package:venera_next/features/reader/reader_image_masks.dart';
 import 'package:venera_next/features/reader/reader_image_mask_editor.dart';
+import 'package:venera_next/features/reader/reader_image_banner_crop_editor.dart';
+import 'package:venera_next/features/reader/reader_image_banner_crops.dart';
+import 'package:venera_next/features/reader/baozi_banner_filter.dart';
 import 'package:venera_next/features/comic_source/source.dart';
 import 'package:venera_next/features/comic_source/comic_source_page.dart'
     show openSourceWebLogin;
@@ -65,6 +68,7 @@ class ReaderScaffold extends StatefulWidget {
     required this.createImageFavorite,
     required this.createImageExport,
     required this.revalidateImage,
+    required this.refreshImageProcessing,
     required this.createSettings,
     required this.createChapterComments,
     required this.chapterNavigation,
@@ -88,6 +92,7 @@ class ReaderScaffold extends StatefulWidget {
   final ReaderImageFavoriteRequest? Function() createImageFavorite;
   final ReaderImageExportRequest? Function() createImageExport;
   final Future<void> Function(ReaderImageAddress address) revalidateImage;
+  final Future<void> Function(ReaderImageAddress address) refreshImageProcessing;
   final ReaderSettingsRequest? Function() createSettings;
   final ReaderChapterCommentsRequest? Function() createChapterComments;
   final ReaderChapterNavigationAction? chapterNavigation;
@@ -431,6 +436,41 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     }
   }
 
+  Future<void> editBaoziBannerCrop() async {
+    final address = await _pickImageAddress();
+    if (!mounted || address == null) return;
+    if (address.sourceKey != 'baozi' && !isBaoziComicImage(address.imageKey)) {
+      showToast(message: '此工具仅适用于包子漫画图片', context: context);
+      return;
+    }
+    try {
+      final bytes = await readReaderImageBytes(address);
+      if (!mounted || bytes == null) {
+        showToast(message: '图片不在缓存中，请先打开并加载这张图片', context: context);
+        return;
+      }
+      final detected = await detectBaoziBanner(bytes);
+      if (!mounted) return;
+      final result = await showDialog<ReaderImageBannerCropEdit>(
+        context: context,
+        builder: (_) => ReaderImageBannerCropEditor(
+          bytes: bytes,
+          initialBand: ReaderImageBannerCrops.read(address) ?? detected,
+          detectedBand: detected,
+        ),
+      );
+      if (!mounted || result == null) return;
+      await ReaderImageBannerCrops.write(address, result.band);
+      await widget.refreshImageProcessing(address);
+      if (mounted) {
+        showToast(message: '已应用横幅裁切', context: context, seconds: 1);
+      }
+    } catch (error, stack) {
+      Log.error('Baozi banner crop', error, stack);
+      if (mounted) showToast(message: error.toString(), context: context);
+    }
+  }
+
   Widget buildBottom() {
     _favorites.bind(widget.createFavoriteQuery());
     return _buildBottom();
@@ -491,6 +531,9 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
       onSave: saveCurrentImage,
       onShare: share,
       onEditImageMask: editImageMask,
+      onEditBaoziBannerCrop: widget.data.sourceKey == 'baozi'
+          ? editBaoziBannerCrop
+          : null,
       onRevalidateImage: revalidateCurrentImage,
       onVerifySourceCookie:
           source == null || source.account?.loginWebsite == null

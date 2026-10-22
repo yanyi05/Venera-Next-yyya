@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
@@ -7,6 +8,84 @@ import 'package:image/image.dart' as img;
 /// Unknown formats, oversized images, and uncertain matches are returned as-is.
 Future<Uint8List> removeBaoziBanner(Uint8List bytes) =>
     compute(_removeBaoziBanner, bytes);
+
+/// Finds the suspected banner band in normalized image coordinates without
+/// modifying the supplied image.
+Future<Rect?> detectBaoziBanner(Uint8List bytes) async {
+  final result = await compute(_findBaoziBannerBand, bytes);
+  if (result == null || result[2] <= 0) return null;
+  return Rect.fromLTRB(0, result[0] / result[2], 1, result[1] / result[2]);
+}
+
+/// Removes a manually selected full-width horizontal band and joins the
+/// remaining top and bottom portions.
+Future<Uint8List> cropBaoziBannerBand(Uint8List bytes, Rect band) =>
+    compute(_cropBaoziBannerBand, [bytes, band.top, band.bottom]);
+
+List<int>? _findBaoziBannerBand(Uint8List bytes) {
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null || decoded.numFrames != 1) return null;
+    final width = decoded.width;
+    final height = decoded.height;
+    if (width < 400 || height < 600 || width * height > 12 * 1000 * 1000) {
+      return null;
+    }
+    final xStep = (width / 360).ceil().clamp(1, 8).toInt();
+    final goodRows = List<bool>.filled(height, false);
+    for (var y = 0; y < height; y++) {
+      var white = 0;
+      var samples = 0;
+      for (var x = 0; x < width; x += xStep) {
+        final p = decoded.getPixel(x, y);
+        if (p.r > 232 && p.g > 232 && p.b > 232) white++;
+        samples++;
+      }
+      goodRows[y] = samples > 0 && white / samples >= 0.52;
+    }
+    var start = 0;
+    while (start < height) {
+      if (!goodRows[start]) {
+        start++;
+        continue;
+      }
+      var end = start + 1;
+      while (end < height && goodRows[end]) end++;
+      final bandHeight = end - start;
+      if (bandHeight >= (height * 0.025).round() &&
+          bandHeight <= (height * 0.20).round() &&
+          start >= height * 0.12 &&
+          height - end >= height * 0.12 &&
+          _hasBaoziLogoAndText(decoded, start, end, xStep)) {
+        return [start, end, height];
+      }
+      start = end;
+    }
+  } catch (_) {}
+  return null;
+}
+
+Uint8List _cropBaoziBannerBand(List<dynamic> args) {
+  final bytes = args[0] as Uint8List;
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null || decoded.numFrames != 1) return bytes;
+    final height = decoded.height;
+    final top = ((args[1] as double) * height).round().clamp(0, height).toInt();
+    final end = ((args[2] as double) * height).round().clamp(0, height).toInt();
+    if (top < height * 0.12 || end > height * 0.88 || end - top < height * 0.005) {
+      return bytes;
+    }
+    final result = img.Image(width: decoded.width, height: height - (end - top));
+    final upper = img.copyCrop(decoded, x: 0, y: 0, width: decoded.width, height: top);
+    final lower = img.copyCrop(decoded, x: 0, y: end, width: decoded.width, height: height - end);
+    img.compositeImage(result, upper, dstX: 0, dstY: 0);
+    img.compositeImage(result, lower, dstX: 0, dstY: top);
+    return Uint8List.fromList(img.encodeJpg(result, quality: 94));
+  } catch (_) {
+    return bytes;
+  }
+}
 
 Uint8List _removeBaoziBanner(Uint8List bytes) {
   try {

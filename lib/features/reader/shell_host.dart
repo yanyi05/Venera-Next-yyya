@@ -52,6 +52,7 @@ class ReaderShellHost extends StatelessWidget {
       createImageFavorite: reader.createImageFavoriteRequest,
       createImageExport: reader.createImageExportRequest,
       revalidateImage: reader.revalidateReaderImage,
+      refreshImageProcessing: reader.refreshReaderImageProcessing,
       createSettings: reader.createSettingsRequest,
       createChapterComments: reader.createChapterCommentsRequest,
       child: child!,

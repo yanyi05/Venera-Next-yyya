@@ -170,6 +170,32 @@ class ReaderState extends State<Reader>
     _imageRefreshChanges.value++;
   }
 
+  /// Rebuilds the displayed image using its cached source bytes and current
+  /// local processing settings, without making another network request.
+  Future<void> refreshReaderImageProcessing(ReaderImageAddress address) async {
+    if (!mounted ||
+        _stateDisposed ||
+        address.comicId != cid ||
+        address.sourceKey != type.sourceKey) {
+      throw StateError('The selected image is no longer current');
+    }
+    for (final resize in [false, true]) {
+      PaintingBinding.instance.imageCache.evict(
+        ReaderImageProvider(
+          address.imageKey,
+          address.sourceKey,
+          address.comicId,
+          address.chapterId,
+          1,
+          enableResize: resize,
+          reloadRevision: imageRefreshRevision,
+        ),
+      );
+    }
+    if (!mounted || _stateDisposed) return;
+    _imageRefreshChanges.value++;
+  }
+
   void updateShell() {
     if (!_stateDisposed && mounted) _shellChanges.value++;
   }

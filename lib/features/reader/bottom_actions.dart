@@ -34,6 +34,7 @@ List<Widget> buildReaderBottomActions(
   required VoidCallback onSave,
   required VoidCallback onShare,
   VoidCallback? onEditImageMask,
+  VoidCallback? onEditBaoziBannerCrop,
   VoidCallback? onRevalidateImage,
   VoidCallback? onVerifySourceCookie,
 }) {
@@ -145,6 +146,15 @@ List<Widget> buildReaderBottomActions(
         child: IconButton(
           icon: const Icon(Icons.crop_free),
           onPressed: onEditImageMask,
+        ),
+      ),
+    if (onEditBaoziBannerCrop != null)
+      Tooltip(
+        message: '预览或调整包子横幅裁切',
+        child: IconButton(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          icon: const Icon(Icons.crop),
+          onPressed: onEditBaoziBannerCrop,
         ),
       ),
     if (onRevalidateImage != null)
