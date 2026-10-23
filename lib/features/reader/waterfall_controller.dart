@@ -205,6 +205,11 @@ class WaterfallController {
     }
   }
 
+  int trimAround(int first, int last) {
+    if (_disposed || _navigating || _loadingBefore || _loadingAfter) return 0;
+    return _flow.trimAround(first, last);
+  }
+
   Future<void> dispose() {
     if (_disposal != null) return _disposal!;
     final completion = Completer<void>();

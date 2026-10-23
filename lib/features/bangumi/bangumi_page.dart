@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:venera_next/components/appbar.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
-import 'package:venera_next/features/search/aggregated_search_page.dart';
+import 'package:venera_next/features/search/search.dart';
 import 'bangumi_client.dart';
 import 'bangumi_service.dart';
 

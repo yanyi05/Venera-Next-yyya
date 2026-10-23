@@ -435,7 +435,12 @@ class PhotoViewCoreState extends State<PhotoViewCore>
       animateScale(scale, value);
     }
 
-    double? initial() => isCurrent() ? initialScale : null;
+    double? initial() => !isCurrent()
+        ? null
+        : widget.hasCustomChild
+            ? getScaleForScaleState(
+                PhotoViewScaleState.initial, scaleBoundaries)
+            : initialScale;
     double? fit(BoxFit value) => isCurrent() ? getScaleWithFit(value) : null;
     original.onDoubleClick = doubleClick;
     original.animatePosition = move;
@@ -486,7 +491,10 @@ class PhotoViewCoreState extends State<PhotoViewCore>
         ) {
           if (snapshot.hasData) {
             final PhotoViewControllerValue value = snapshot.data!;
-            final useImageScale = widget.filterQuality != FilterQuality.none;
+            // Custom children own their image decode/filtering. They still need the
+            // transform scale and finite intrinsic layout used by zoom gestures.
+            final useImageScale = !widget.hasCustomChild &&
+                widget.filterQuality != FilterQuality.none;
 
             final computedScale = useImageScale ? 1.0 : scale;
 

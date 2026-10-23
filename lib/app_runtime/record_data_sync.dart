@@ -385,9 +385,17 @@ class _ApplicationRecordSyncData implements RecordSyncApplication {
       AppDataOperations.instance.run(action);
   @override
   Future<void> capture(Directory staging) async {
+    void checkReading() {
+      if (ReadingActivity.instance.isReading) throw const RequestCancelled();
+    }
+
+    checkReading();
     await SourceTransactionJournal.checkReadyForTransfer(dataPath);
+    checkReading();
     await HistoryManager.cache?.waitForAsyncWrites();
+    checkReading();
     await appdata.saveData(false);
+    checkReading();
     await _captureRecordSnapshot(dataPath, staging.path, appdata.toJson());
   }
 

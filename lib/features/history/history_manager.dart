@@ -3,6 +3,7 @@ import 'history_repository.dart';
 import 'history_model.dart';
 import 'history_retention_change.dart';
 import 'dart:async';
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -48,8 +49,23 @@ class HistoryManager with ChangeNotifier {
   final HistoryDurationStorageWriter _writeDuration;
   final AppDataOperations _operations;
 
+  bool _readingObserverAttached = false;
+  bool _readingNotificationPending = false;
+  void _readingChanged() {
+    if (!ReadingActivity.instance.isReading && _readingNotificationPending) {
+      _readingNotificationPending = false;
+      if (isInitialized) notifyListeners();
+    }
+  }
+
   @override
-  void notifyListeners() => _operations.publish(super.notifyListeners);
+  void notifyListeners() {
+    if (ReadingActivity.instance.isReading && _readingObserverAttached) {
+      _readingNotificationPending = true;
+      return;
+    }
+    _operations.publish(super.notifyListeners);
+  }
 
   /// Image favorites share this database lifetime and ordered access queue.
   /// The callback may own a background reader, and must await its actual close.
@@ -97,6 +113,10 @@ class HistoryManager with ChangeNotifier {
   _HistoryInitialization? _initialization;
 
   Future<void> init() {
+    if (!_readingObserverAttached) {
+      _readingObserverAttached = true;
+      ReadingActivity.instance.addListener(_readingChanged);
+    }
     if (_initialization == null && isInitialized) return Future.value();
     final attempt = _initialization ??= _HistoryInitialization(++_generation);
     // Every caller offers its own admission, while sharing one initialization.
@@ -553,6 +573,9 @@ class HistoryManager with ChangeNotifier {
   List<History> getAllByReadDuration() => _repository.getAllByReadDuration();
 
   void close() {
+    ReadingActivity.instance.removeListener(_readingChanged);
+    _readingObserverAttached = false;
+    _readingNotificationPending = false;
     ++_generation;
     isInitialized = false;
     _initialization = null;
@@ -560,6 +583,14 @@ class HistoryManager with ChangeNotifier {
     final database = _database;
     _database = null;
     database?.dispose();
+  }
+
+  @override
+  void dispose() {
+    ReadingActivity.instance.removeListener(_readingChanged);
+    _readingObserverAttached = false;
+    _readingNotificationPending = false;
+    super.dispose();
   }
 
   void notifyChanges() {

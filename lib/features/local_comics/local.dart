@@ -27,6 +27,8 @@ import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/sqlite_connection.dart';
 import 'download_task.dart';
+import 'images_download_task.dart';
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'download_task_storage.dart';
 import 'download_queue.dart';
 import 'download_task_codec.dart';
@@ -403,7 +405,14 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   String findValidId(ComicType type) => _repository.findValidId(type);
 
   Future<void> add(LocalComic comic, [String? id]) async {
-    LocalComicStorageGuard.instance.write(() => _repository.add(comic, id));
+    LocalComicStorageGuard.instance.write(() {
+      _repository.protectAutomatic(
+        id ?? comic.id,
+        comic.comicType,
+        protect: true,
+      );
+      _repository.add(comic, id);
+    });
     _rememberComic(comic, id: id);
     notifyListeners();
   }
@@ -632,8 +641,22 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     );
   }
 
+  DownloadTask? _registeringDownload;
   late final _downloadQueue = DownloadQueue(
-    commitComic: (comic) => _repository.add(comic),
+    commitComic: (comic) => runSqliteTransaction(_db, () {
+      final before =
+          find(comic.id, comic.comicType)?.downloadedChapters.toSet() ??
+          <String>{};
+      _repository.add(comic);
+      final task = _registeringDownload;
+      if (task is ImagesDownloadTask && task.automatic) {
+        _repository.registerAutomaticChapters(
+          comic.id,
+          comic.comicType,
+          comic.downloadedChapters.where((id) => !before.contains(id)),
+        );
+      }
+    }),
     notifyChanged: notifyListeners,
     requestSave: saveCurrentDownloadingTasks,
     reportError: (error, stack) => Log.error('DownloadQueue', error, stack),
@@ -669,7 +692,13 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   @override
   void completeTask(DownloadTask task) {
     _storageAccess.check();
-    _downloadQueue.complete(task);
+    final previous = _registeringDownload;
+    _registeringDownload = task;
+    try {
+      _downloadQueue.complete(task);
+    } finally {
+      _registeringDownload = previous;
+    }
   }
 
   @override
@@ -779,6 +808,15 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
 
   void addTask(DownloadTask task) {
     _storageAccess.check();
+    if (!task.isAutomatic) {
+      LocalComicStorageGuard.instance.write(
+        () => _repository.protectAutomatic(
+          task.id,
+          task.comicType,
+          protect: true,
+        ),
+      );
+    }
     _downloadQueue.add(task);
   }
 
@@ -808,10 +846,69 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     notifyListeners();
   }
 
+  bool? automaticChapterProtection(String id, ComicType type, String chapter) =>
+      _repository.automaticProtection(id, type, chapter);
+
+  void protectAutomaticChapter(
+    String id,
+    ComicType type,
+    String chapter,
+    bool protect,
+  ) {
+    LocalComicStorageGuard.instance.write(
+      () => _repository.protectAutomatic(
+        id,
+        type,
+        chapter: chapter,
+        protect: protect,
+      ),
+    );
+    notifyListeners();
+  }
+
+  void recordAutomaticReading(
+    String id,
+    ComicType type,
+    Map<String, int> visits,
+    Set<String> completed,
+  ) {
+    LocalComicStorageGuard.instance.write(
+      () => _repository.recordAutomaticReading(id, type, visits, completed),
+    );
+    notifyListeners();
+  }
+
+  List<({String id, ComicType type, String chapter, int readAt})>
+  automaticCleanupCandidates() => _repository
+      .automaticReadChapters()
+      .where((entry) => !isDownloading(entry.id, entry.type))
+      .toList();
+
+  Future<void> cleanAutomaticChapter(
+    ({String id, ComicType type, String chapter, int readAt}) entry,
+    bool Function() isAllowed,
+  ) => runWithExclusiveStorage(() async {
+    bool current() =>
+        isAllowed() &&
+        !ReadingActivity.instance.isReading &&
+        _repository.automaticReadChapters().any((e) => e == entry) &&
+        !isDownloading(entry.id, entry.type);
+    if (!current()) return;
+    final comic = find(entry.id, entry.type);
+    if (comic == null || !comic.downloadedChapters.contains(entry.chapter)) {
+      return;
+    }
+    await _deleteComicChapters(comic, [entry.chapter], canCommit: current);
+  });
+
   Future<void> deleteComicChapters(LocalComic c, List<String> chapters) =>
       runWithExclusiveStorage(() => _deleteComicChapters(c, chapters));
 
-  Future<void> _deleteComicChapters(LocalComic c, List<String> chapters) async {
+  Future<void> _deleteComicChapters(
+    LocalComic c,
+    List<String> chapters, {
+    bool Function()? canCommit,
+  }) async {
     final current = find(c.id, c.comicType);
     if (current == null) return;
     c = current;
@@ -840,6 +937,9 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     );
     await _deletionJournal.run(shouldRemovedDirs, (markCommitted) async {
       runSqliteTransaction(_db, () {
+        if (canCommit != null && !canCommit()) {
+          throw StateError('Automatic cleanup deferred');
+        }
         _validateDeletionSnapshot(snapshot);
         _repository.removeChapters(c.id, c.comicType, chapters);
         markCommitted();

@@ -6,8 +6,10 @@ class ReaderImageCachePolicy {
     required this.setLimit,
     required this.onError,
     this.onConfigured,
+    this.maxBytes = 500 << 20,
   });
 
+  final int maxBytes;
   static const defaultLimit = 100 << 20;
 
   static int limitForMemory(int availableBytes) {
@@ -30,7 +32,7 @@ class ReaderImageCachePolicy {
     try {
       final memory = await readAvailableMemory();
       if (_disposed || generation != _generation || memory == null) return;
-      final limit = limitForMemory(memory);
+      final limit = limitForMemory(memory).clamp(defaultLimit, maxBytes);
       setLimit(limit);
       onConfigured?.call(memory, limit);
     } catch (error, stack) {

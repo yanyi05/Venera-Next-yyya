@@ -101,6 +101,56 @@ class ContinuousModeState extends State<ReaderContinuousView>
   var photoViewController = PhotoViewController();
   StreamSubscription<PhotoViewControllerValue>? _photoPositionSubscription;
   bool _positionUpdateScheduled = false;
+  Timer? _trimTimer;
+  void _scheduleTrim() {
+    _trimTimer?.cancel();
+    if (!crossChapter || _waterfallFlow.segments.length <= 5) return;
+    _trimTimer = Timer(const Duration(milliseconds: 600), () {
+      if (_disposed ||
+          !mounted ||
+          _isRestoringPrependedSegmentPosition ||
+          _isNavigatingWaterfallLocation ||
+          !itemScrollController.isAttached ||
+          isZoomedIn) {
+        return;
+      }
+      final positions =
+          itemPositionsListener.itemPositions.value
+              .where(
+                (p) =>
+                    p.index > 0 &&
+                    p.index <= _flowImageCount &&
+                    p.itemTrailingEdge > 0 &&
+                    p.itemLeadingEdge < 1,
+              )
+              .toList()
+            ..sort((a, b) => a.index.compareTo(b.index));
+      if (positions.isEmpty) return;
+      final anchor = positions.first;
+      final first = _imageRefAt(anchor.index)?.position.chapter;
+      final last = _imageRefAt(positions.last.index)?.position.chapter;
+      if (first == null || last == null) return;
+      final count = _waterfallFlow.segments.length;
+      final removed = _waterfall.trimAround(first, last);
+      if (count == _waterfallFlow.segments.length) return;
+      _isRestoringPrependedSegmentPosition = true;
+      setState(() {});
+      // Rebase in the same event turn, before a frame can paint shifted indices.
+      if (removed > 0 && itemScrollController.isAttached) {
+        itemScrollController.jumpTo(
+          index: anchor.index - removed,
+          alignment: anchor.itemLeadingEdge,
+        );
+      }
+      final owner = _waterfall;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _disposed || !identical(owner, _waterfall)) return;
+        _isRestoringPrependedSegmentPosition = false;
+        _schedulePositionUpdate();
+      });
+    });
+  }
+
   ScrollController? _scrollController;
   bool _disposed = false;
   Timer? _initialCacheTimer;
@@ -360,7 +410,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
   void initState() {
     widget.onViewportChanged(this, true);
     _initSegments();
-    itemPositionsListener.itemPositions.addListener(onPositionChanged);
+    itemPositionsListener.itemPositions.addListener(_schedulePositionUpdate);
     _photoPositionSubscription = photoViewController.outputStateStream.listen(
       (_) => _schedulePositionUpdate(),
     );
@@ -399,6 +449,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
   @override
   void dispose() {
     _disposed = true;
+    _trimTimer?.cancel();
     _smoothGeneration++;
     _smoothPosition = null;
     _initialCacheTimer?.cancel();
@@ -411,7 +462,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
     _releaseWaterfallLoading?.call(notify: false);
     unawaited(_waterfall.dispose());
     unawaited(_imageDownloads.dispose());
-    itemPositionsListener.itemPositions.removeListener(onPositionChanged);
+    itemPositionsListener.itemPositions.removeListener(_schedulePositionUpdate);
     unawaited(_photoPositionSubscription?.cancel());
     photoViewController.dispose();
     super.dispose();
@@ -439,9 +490,12 @@ class ContinuousModeState extends State<ReaderContinuousView>
     // Match the active scroll owner, not cached indices that can predate a resize.
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return;
-    final segments = crossChapter
-        ? _waterfallFlow.segments
-        : const <WaterfallChapterSegment>[];
+    final chaptersById = <String, int>{};
+    if (crossChapter) {
+      for (final segment in _waterfallFlow.segments) {
+        chaptersById.putIfAbsent(segment.eid, () => segment.chapter);
+      }
+    }
     for (final state in imageStates) {
       if (!state.mounted) continue;
       final scrollable = state.context
@@ -459,10 +513,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
         continue;
       }
       final chapter = crossChapter
-          ? segments
-                .where((segment) => segment.eid == image.eid)
-                .firstOrNull
-                ?.chapter
+          ? chaptersById[image.eid]
           : image.eid == widget.chapterId(currentChapter)
           ? currentChapter
           : null;
@@ -536,8 +587,11 @@ class ContinuousModeState extends State<ReaderContinuousView>
           _isNavigatingWaterfallLocation) {
         return;
       }
+      final changed =
+          currentChapter != imageRef.position.chapter ||
+          currentPage != imageRef.position.imageNumber;
       _setReaderLocation(imageRef);
-      widget.onUpdate();
+      if (changed) widget.onUpdate();
     } else if (page != currentPage) {
       navigation.reportPage(page);
       widget.onUpdate();
@@ -551,6 +605,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
       lastVisible = math.max(lastVisible, image.index);
     }
     cacheImages(lastVisible);
+    _scheduleTrim();
     if (crossChapter) {
       _ensureWaterfallImagesBefore(firstVisible);
       _ensureWaterfallImagesAfter(lastVisible);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'dart:convert';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -38,6 +39,101 @@ class SmartDownloadsRuntime {
   String? _directory;
   LocalManager? _library;
   Timer? _scheduled;
+  Timer? _cleanupTimer;
+  bool _cleaning = false;
+  int _cleanupRetryAfter = 0;
+
+  void _readingChanged() {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    if (!ReadingActivity.instance.isReading) _scheduleCleanup();
+  }
+
+  void _scheduleCleanup() {
+    if (!_running ||
+        _cleaning ||
+        _cleanupTimer != null ||
+        !_policy.cleanupEnabled ||
+        ReadingActivity.instance.isReading ||
+        _directory != App.dataPath) {
+      return;
+    }
+    final library = _library;
+    if (library == null ||
+        !identical(library, _findLibrary()) ||
+        library.downloadingTasks.isNotEmpty) {
+      return;
+    }
+    try {
+      final entries = library.automaticCleanupCandidates();
+      if (entries.isEmpty) return;
+      final delay = Duration(hours: _policy.retentionHours).inMilliseconds;
+      var next = entries
+          .map((e) => e.readAt + delay)
+          .reduce((a, b) => a < b ? a : b);
+      if (next < _cleanupRetryAfter) next = _cleanupRetryAfter;
+      final remaining = next - DateTime.now().millisecondsSinceEpoch;
+      _cleanupTimer = Timer(
+        Duration(milliseconds: remaining < 2000 ? 2000 : remaining),
+        () {
+          _cleanupTimer = null;
+          unawaited(_cleanupOne());
+        },
+      );
+    } catch (error, stack) {
+      _report(error, stack);
+    }
+  }
+
+  Future<void> _cleanupOne() async {
+    if (_cleaning ||
+        !_running ||
+        !_policy.cleanupEnabled ||
+        ReadingActivity.instance.isReading) {
+      return;
+    }
+    final library = _library;
+    if (library == null ||
+        !identical(library, _findLibrary()) ||
+        _directory != App.dataPath) {
+      return;
+    }
+    _cleaning = true;
+    try {
+      final cutoff = DateTime.now()
+          .subtract(Duration(hours: _policy.retentionHours))
+          .millisecondsSinceEpoch;
+      final entries = library.automaticCleanupCandidates().where(
+        (e) => e.readAt <= cutoff,
+      );
+      if (entries.isEmpty) return;
+      final entry = entries.first;
+      await ReadingActivity.instance.runMaintenance(
+        () => library.cleanAutomaticChapter(
+          entry,
+          () =>
+              _running &&
+              _policy.cleanupEnabled &&
+              _directory == App.dataPath &&
+              identical(library, _findLibrary()) &&
+              entry.readAt <=
+                  DateTime.now()
+                      .subtract(Duration(hours: _policy.retentionHours))
+                      .millisecondsSinceEpoch,
+        ),
+      );
+      _cleanupRetryAfter = 0;
+    } catch (error, stack) {
+      _cleanupRetryAfter = DateTime.now()
+          .add(const Duration(minutes: 1))
+          .millisecondsSinceEpoch;
+      _report(error, stack);
+    } finally {
+      _cleaning = false;
+      _scheduleCleanup();
+    }
+  }
+
   StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
   StreamSubscription<BatteryState>? _powerSubscription;
   final _attempted = <String>{};
@@ -60,6 +156,7 @@ class SmartDownloadsRuntime {
     _directory = App.dataPath;
     _library = _findLibrary();
     _library?.addListener(_schedule);
+    ReadingActivity.instance.addListener(_readingChanged);
     appdata.settings.addListener(_settingsChanged);
     SmartDownloadRequests.instance.addListener(_schedule);
     _settingsChanged();
@@ -67,6 +164,9 @@ class SmartDownloadsRuntime {
 
   void stop() {
     _running = false;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    ReadingActivity.instance.removeListener(_readingChanged);
     _scheduled?.cancel();
     _scheduled = null;
     _library?.removeListener(_schedule);
@@ -90,6 +190,9 @@ class SmartDownloadsRuntime {
   }
 
   void _settingsChanged() {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    _scheduleCleanup();
     try {
       _applySettings();
     } catch (error, stack) {
@@ -231,6 +334,7 @@ class SmartDownloadsRuntime {
       return;
     }
     _evaluating = true;
+    _scheduleCleanup();
     try {
       if (!_running || _directory != App.dataPath) return;
       final library = _library;

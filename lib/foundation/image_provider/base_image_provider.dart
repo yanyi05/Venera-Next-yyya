@@ -102,7 +102,9 @@ abstract class BaseImageProvider<T extends BaseImageProvider<T>>
 
   static const int maxImagePixel = 2560 * 1440;
 
-  static TargetImageSize _getTargetSize(int width, int height) {
+  int get decodePixelLimit => maxImagePixel;
+
+  TargetImageSize _getTargetSize(int width, int height) {
     // ignore invalid size
     if (width <= 0 || height <= 0) {
       return TargetImageSize(width: width, height: height);
@@ -113,8 +115,8 @@ abstract class BaseImageProvider<T extends BaseImageProvider<T>>
       return TargetImageSize(width: width, height: height);
     }
     // resize if too large
-    if (width * height > maxImagePixel) {
-      final ratio = sqrt(maxImagePixel / (width * height));
+    if (width * height > decodePixelLimit) {
+      final ratio = sqrt(decodePixelLimit / (width * height));
       return TargetImageSize(
         width: (width * ratio).round(),
         height: (height * ratio).round(),

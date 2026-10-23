@@ -1,6 +1,7 @@
 import 'package:venera_next/features/history/history_repository.dart';
 import 'dart:io';
 import 'dart:async';
+import 'package:venera_next/foundation/reading_activity.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -66,6 +67,26 @@ void main() {
 
         directory.deleteSync(recursive: true);
       });
+
+      test(
+        'reading saves stay durable while global notifications coalesce',
+        () async {
+          var notifications = 0;
+          void changed() => notifications++;
+          manager.addListener(changed);
+          final release = ReadingActivity.instance.enter();
+          try {
+            await manager.addHistory(_history('reading'));
+            await manager.addHistory(_history('reading')..page = 7);
+            expect(manager.find('reading', ComicType.local)!.page, 7);
+            expect(notifications, 0);
+          } finally {
+            release();
+          }
+          expect(notifications, 1);
+          manager.removeListener(changed);
+        },
+      );
 
       test(
         'external imports preserve queue order, failure recovery and connection ownership',

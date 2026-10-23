@@ -98,11 +98,76 @@ class _SmartDownloadSettingsPageState
                 onChanged: editable ? (v) => _save('ahead', v!) : null,
               ),
             ),
+            const Divider(),
+            SwitchListTile(
+              title: const Text('自动清理已读的智能预下载章节'),
+              subtitle: const Text(
+                '默认关闭。每本漫画保留最近 3 个已读的智能预下载章节；手动下载、本地导入和已保护的章节不删除。',
+              ),
+              value: current.cleanupEnabled,
+              onChanged: editable ? (v) => _save('cleanupEnabled', v) : null,
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: DropdownButtonFormField<int>(
+                key: ValueKey('retention-${current.retentionHours}'),
+                initialValue: current.retentionHours,
+                decoration: const InputDecoration(labelText: '读完后保留多久'),
+                items: [
+                  for (final hours in {
+                    1,
+                    6,
+                    24,
+                    72,
+                    168,
+                    current.retentionHours,
+                  }.toList()..sort())
+                    DropdownMenuItem(
+                      value: hours,
+                      child: Text(
+                        hours % 24 == 0 ? '${hours ~/ 24} 天' : '$hours 小时',
+                      ),
+                    ),
+                ],
+                onChanged: editable ? (v) => _save('retentionHours', v!) : null,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextFormField(
+                key: ValueKey('custom-retention-${current.retentionHours}'),
+                initialValue: current.retentionHours.toString(),
+                enabled: editable,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: '自定义保留小时数',
+                  helperText: '输入 1～8760 小时，按键盘完成保存',
+                ),
+                onFieldSubmitted: (text) {
+                  final hours = int.tryParse(text.trim());
+                  if (hours == null || hours < 1 || hours > 8760) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('请输入 1～8760 小时')),
+                    );
+                  } else {
+                    _save('retentionHours', hours);
+                  }
+                },
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '到达章节最后一页后才计为读完；重新阅读会延后清理。清理仅在前台、退出阅读后分批进行，iOS 不保证后台准点执行。\n'
+                '漫画详情的下载选章页中，智能预下载章节旁的锁可保护／取消保护。此前没有来源记录的下载不会追溯清理。',
+              ),
+            ),
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
                 '网络与电源条件必须同时满足。条件变化后暂停自动任务，恢复后继续；不会自动恢复你手动暂停的任务。\n\n'
-                '阅读期间保持单并发；手动下载优先。已下载的章节会跳过，不会自动删除旧章节。\n\n'
+                '阅读期间保持单并发；手动下载优先。已下载的章节会跳过；自动清理需另外开启。\n\n'
                 'iOS 仅在应用处于前台时安排预下载，锁屏／切到后台后暂停。网络类型未知时不启动自动下载；Wi-Fi 连接不代表网站一定可用。\n\n'
                 '允许蜂窝数据会消耗流量。网络切换检测存在延迟，在途请求可能产生少量流量；若必须完全禁止蜂窝流量，可同时在 iOS 设置中关闭本应用的蜂窝数据权限。',
               ),

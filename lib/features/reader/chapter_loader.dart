@@ -7,6 +7,7 @@ import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/network/request_scope.dart';
 
 import 'chapter_image_loader.dart';
+import 'package:venera_next/foundation/reading_activity.dart';
 
 class LocalComicFilesUnavailable implements Exception {
   const LocalComicFilesUnavailable(this.path);
@@ -34,6 +35,9 @@ Future<List<String>> loadReaderChapterImages({
   void Function()? onOnlineFallback,
   RequestScope? scope,
 }) async {
+  if (ReadingActivity.instance.hasMaintenance) {
+    await ReadingActivity.instance.waitForMaintenance();
+  }
   scope?.check();
   final chapterId = chapters?.ids.elementAtOrNull(chapter - 1);
   if (chapters != null && chapterId == null) {

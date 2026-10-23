@@ -20,6 +20,9 @@ class LocalRepository {
   LocalRepository(this.db);
   final Database db;
   void initialize() => runSqliteTransaction(db, () {
+    db.execute(
+      "CREATE TABLE IF NOT EXISTS smart_chapters (id TEXT NOT NULL, comic_type INTEGER NOT NULL, chapter TEXT NOT NULL, read_at INTEGER, protected INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(id, comic_type, chapter))",
+    );
     db.execute('''
       CREATE TABLE IF NOT EXISTS comics (
         id TEXT NOT NULL,
@@ -46,6 +49,90 @@ class LocalRepository {
       );
     ''');
   });
+
+  void registerAutomaticChapters(
+    String id,
+    ComicType type,
+    Iterable<String> chapters,
+  ) {
+    if (type == ComicType.local) return;
+    for (final chapter in chapters) {
+      db.execute(
+        'INSERT OR IGNORE INTO smart_chapters (id, comic_type, chapter) VALUES (?, ?, ?)',
+        [id, type.value, chapter],
+      );
+    }
+  }
+
+  bool? automaticProtection(String id, ComicType type, String chapter) {
+    final rows = db.select(
+      'SELECT protected FROM smart_chapters WHERE id = ? AND comic_type = ? AND chapter = ?',
+      [id, type.value, chapter],
+    );
+    return rows.isEmpty ? null : rows.single['protected'] == 1;
+  }
+
+  void protectAutomatic(
+    String id,
+    ComicType type, {
+    String? chapter,
+    required bool protect,
+  }) {
+    db.execute(
+      'UPDATE smart_chapters SET protected = ? WHERE id = ? AND comic_type = ?${chapter == null ? '' : ' AND chapter = ?'}',
+      [protect ? 1 : 0, id, type.value, ?chapter],
+    );
+  }
+
+  void recordAutomaticReading(
+    String id,
+    ComicType type,
+    Map<String, int> visits,
+    Set<String> completed,
+  ) {
+    for (final entry in visits.entries) {
+      db.execute(
+        'UPDATE smart_chapters SET read_at = ? WHERE id = ? AND comic_type = ? AND chapter = ? AND (read_at IS NOT NULL OR ? = 1)',
+        [
+          entry.value,
+          id,
+          type.value,
+          entry.key,
+          completed.contains(entry.key) ? 1 : 0,
+        ],
+      );
+    }
+  }
+
+  List<({String id, ComicType type, String chapter, int readAt})>
+  automaticReadChapters() {
+    final counts = <(String, int), int>{};
+    final thirdReadAt = <(String, int), int>{};
+    final result =
+        <({String id, ComicType type, String chapter, int readAt})>[];
+    for (final row in db.select(
+      'SELECT * FROM smart_chapters WHERE read_at IS NOT NULL ORDER BY read_at DESC, chapter DESC',
+    )) {
+      final id = row['id'] as String, type = row['comic_type'] as int;
+      final key = (id, type);
+      final rank = counts.update(key, (v) => v + 1, ifAbsent: () => 1);
+      if (rank == 3) thirdReadAt[key] = row['read_at'] as int;
+      // Protected entries count towards the three most recently read chapters.
+      if (rank <= 3 ||
+          row['read_at'] == thirdReadAt[key] ||
+          row['protected'] == 1 ||
+          type == ComicType.local.value) {
+        continue;
+      }
+      result.add((
+        id: id,
+        type: ComicType(type),
+        chapter: row['chapter'] as String,
+        readAt: row['read_at'] as int,
+      ));
+    }
+    return result;
+  }
 
   LocalPageMigration? findPageMigration(String id, ComicType type) {
     final rows = db.select(
@@ -143,6 +230,12 @@ class LocalRepository {
     runSqliteTransaction(db, () {
       final comic = find(id, type);
       if (comic == null) return;
+      for (final chapter in selected) {
+        db.execute(
+          'DELETE FROM smart_chapters WHERE id = ? AND comic_type = ? AND chapter = ?',
+          [id, type.value, chapter],
+        );
+      }
       final remaining = comic.downloadedChapters
           .where((chapter) => !selected.contains(chapter))
           .toList();
@@ -158,6 +251,10 @@ class LocalRepository {
   }
 
   void _remove(String id, ComicType type) {
+    db.execute('DELETE FROM smart_chapters WHERE id = ? AND comic_type = ?', [
+      id,
+      type.value,
+    ]);
     db.execute(
       'DELETE FROM natural_sort_migration WHERE id = ? AND comic_type = ?',
       [id, type.value],

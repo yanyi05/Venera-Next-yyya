@@ -24,6 +24,7 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
     this.eid,
     this.page, {
     this.enableResize = false,
+    this.decodePixelLimit = BaseImageProvider.maxImagePixel,
     this.reloadRevision = 0,
   }) : cropRevision = ReaderImageBannerCrops.revision(
          ReaderImageAddress(
@@ -34,6 +35,8 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
          ),
        );
 
+  @override
+  final int decodePixelLimit;
   final int cropRevision;
   final String imageKey;
 
@@ -56,7 +59,9 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
   bool get retryFileSystemErrors => !imageKey.startsWith('file://');
 
   Future<Uint8List?> _readOriginal(ReaderImageAddress address) async {
-    final file = await CacheManager().findCache('${address.cacheKey}@original');
+    final file =
+        await CacheManager().findUnmodifiedCache(address.cacheKey) ??
+        await CacheManager().findCache('${address.cacheKey}@original');
     return file?.readAsBytes();
   }
 
@@ -116,7 +121,7 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
     }
     checkStop();
     if (manualBands != null && manualBands.isNotEmpty) {
-      imageBytes = await cropImageBannerBands(imageBytes, manualBands);
+      imageBytes = await cachedCropImageBannerBands(imageBytes, manualBands);
       checkStop();
     }
     if (manualBands == null &&
@@ -149,5 +154,5 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
 
   @override
   String get key =>
-      "$imageKey@$sourceKey@$cid@$eid@$enableResize@$reloadRevision@$cropRevision";
+      "$imageKey@$sourceKey@$cid@$eid@$enableResize@$decodePixelLimit@$reloadRevision@$cropRevision";
 }

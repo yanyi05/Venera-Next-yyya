@@ -1,4 +1,6 @@
 import 'dart:ui' as ui;
+import 'dart:async';
+import 'display_image_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -150,7 +152,27 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
     return visible.width > 1 && visible.height > 1;
   }
 
-  static final Map<int, Size> _cache = {};
+  static final _cache = <Object, Size>{};
+  Object get _sizeKey {
+    final provider = widget.image;
+    return provider is ReaderDisplayImageProvider ? provider.image : provider;
+  }
+
+  Timer? _chunkTimer;
+  ImageChunkEvent? _pendingChunk;
+  void _clearChunk() {
+    _chunkTimer?.cancel();
+    _chunkTimer = null;
+    _pendingChunk = null;
+  }
+
+  void _rememberSize(Size size) {
+    _cache.remove(_sizeKey);
+    _cache[_sizeKey] = size;
+    while (_cache.length > 512) {
+      _cache.remove(_cache.keys.first);
+    }
+  }
 
   static void clear() => _cache.clear();
 
@@ -165,6 +187,7 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
   @override
   void dispose() {
     assert(_imageStream != null);
+    _clearChunk();
     WidgetsBinding.instance.removeObserver(this);
     _stopListeningToStream();
     _completerHandle?.dispose();
@@ -250,6 +273,7 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
         _handleImageFrame,
         onChunk: _handleImageChunk,
         onError: (Object error, StackTrace? stackTrace) {
+          _clearChunk();
           setState(() {
             _lastException = error;
           });
@@ -260,6 +284,7 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
   }
 
   void _handleImageFrame(ImageInfo imageInfo, bool synchronousCall) {
+    _clearChunk();
     setState(() {
       _replaceImage(info: imageInfo);
       _loadingProgress = null;
@@ -270,9 +295,15 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
   }
 
   void _handleImageChunk(ImageChunkEvent event) {
-    setState(() {
-      _loadingProgress = event;
-      _lastException = null;
+    _pendingChunk = event;
+    _chunkTimer ??= Timer(const Duration(milliseconds: 120), () {
+      _chunkTimer = null;
+      if (!mounted || _pendingChunk == null) return;
+      setState(() {
+        _loadingProgress = _pendingChunk;
+        _pendingChunk = null;
+        _lastException = null;
+      });
     });
   }
 
@@ -292,6 +323,7 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
       return;
     }
 
+    _clearChunk();
     if (_isListeningToStream) {
       _imageStream!.removeListener(_getListener());
     }
@@ -406,30 +438,57 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
 
         if (_imageInfo != null) {
           // Record the height and the width of the image
-          _cache[widget.image.hashCode] = Size(
-            _imageInfo!.image.width.toDouble(),
-            _imageInfo!.image.height.toDouble(),
+          _rememberSize(
+            Size(
+              _imageInfo!.image.width.toDouble(),
+              _imageInfo!.image.height.toDouble(),
+            ),
           );
         }
 
-        Size? cacheSize = _cache[widget.image.hashCode];
+        Size? cacheSize = _cache[_sizeKey];
+        // PhotoView may initially measure a custom child without finite bounds.
+        // Keep its loading geometry finite until the actual aspect ratio arrives.
+        final fallback =
+            MediaQuery.maybeSizeOf(context) ?? const Size(300, 300);
+        if (width == double.infinity && height == double.infinity) {
+          final known = cacheSize == null
+              ? null
+              : widget.splitWideImage
+              ? splitWideImageDisplaySize(cacheSize)
+              : cacheSize;
+          width = constrains.hasBoundedWidth
+              ? constrains.maxWidth
+              : known?.width ?? fallback.width;
+          height = constrains.hasBoundedHeight
+              ? constrains.maxHeight
+              : known?.height ?? fallback.height;
+        }
         if (cacheSize != null) {
           final displaySize = widget.splitWideImage
               ? splitWideImageDisplaySize(cacheSize)
               : cacheSize;
           if (width == double.infinity) {
-            width = constrains.maxWidth;
+            width = constrains.hasBoundedWidth
+                ? constrains.maxWidth
+                : fallback.width;
             height = width * displaySize.height / displaySize.width;
           } else if (height == double.infinity) {
-            height = constrains.maxHeight;
+            height = constrains.hasBoundedHeight
+                ? constrains.maxHeight
+                : fallback.height;
             width = height * displaySize.width / displaySize.height;
           }
         } else {
           if (width == double.infinity) {
-            width = constrains.maxWidth;
+            width = constrains.hasBoundedWidth
+                ? constrains.maxWidth
+                : fallback.width;
             height = 300;
           } else if (height == double.infinity) {
-            height = constrains.maxHeight;
+            height = constrains.hasBoundedHeight
+                ? constrains.maxHeight
+                : fallback.height;
             width = 300;
           }
         }

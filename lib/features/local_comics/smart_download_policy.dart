@@ -7,11 +7,15 @@ enum SmartDownloadTransport { wifi, mobile, other }
 class SmartDownloadPolicy {
   const SmartDownloadPolicy({
     this.enabled = false,
+    this.cleanupEnabled = false,
+    this.retentionHours = 24,
     this.ahead = 3,
     this.network = SmartDownloadNetwork.wifi,
     this.power = SmartDownloadPower.charging,
   });
   final bool enabled;
+  final bool cleanupEnabled;
+  final int retentionHours;
   final int ahead;
   final SmartDownloadNetwork network;
   final SmartDownloadPower power;
@@ -20,6 +24,12 @@ class SmartDownloadPolicy {
     final data = value is Map ? value : const {};
     return SmartDownloadPolicy(
       enabled: data['enabled'] == true,
+      cleanupEnabled: data['cleanupEnabled'] == true,
+      retentionHours:
+          (data['retentionHours'] is num
+                  ? (data['retentionHours'] as num).toInt()
+                  : 24)
+              .clamp(1, 8760),
       ahead: (data['ahead'] is num ? (data['ahead'] as num).toInt() : 3).clamp(
         1,
         10,
@@ -34,6 +44,8 @@ class SmartDownloadPolicy {
   }
   Map<String, dynamic> toJson() => {
     'enabled': enabled,
+    'cleanupEnabled': cleanupEnabled,
+    'retentionHours': retentionHours,
     'ahead': ahead,
     'network': network.name,
     'power': power.name,

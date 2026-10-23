@@ -33,6 +33,7 @@ import 'package:venera_next/features/reader/reader_viewport.dart';
 import 'package:venera_next/features/reader/page_order_migration.dart';
 import 'package:venera_next/features/reader/chapter_menu.dart';
 import 'chapter_loader.dart';
+import 'package:venera_next/features/local_comics/local.dart' show LocalManager;
 import 'chapter_request.dart';
 import 'package:venera_next/features/reader/image_favorite_controller.dart';
 import 'package:venera_next/features/reader/image_export.dart';
@@ -1007,8 +1008,24 @@ class ReaderState extends State<Reader>
     _freezeSession();
     final sourceKey = type.sourceKey, comicId = cid;
     final completed = Set<String>.of(_bangumiCompletedChapters);
+    final visits = Map<String, int>.of(_automaticChapterVisits);
+    final automaticLibrary = LocalManager.current;
+    final automaticType = type;
     final closing = _sessionClosing = () async {
       await _session.dispose();
+      if (visits.isNotEmpty &&
+          identical(automaticLibrary, LocalManager.current)) {
+        try {
+          automaticLibrary?.recordAutomaticReading(
+            comicId,
+            automaticType,
+            visits,
+            completed,
+          );
+        } catch (error, stack) {
+          Log.error('Automatic download reading', error, stack);
+        }
+      }
       if (completed.isNotEmpty) {
         try {
           await BangumiService.instance.completed(
@@ -1542,6 +1559,7 @@ class ReaderState extends State<Reader>
   }
 
   late final _imageCachePolicy = ReaderImageCachePolicy(
+    maxBytes: App.isIOS ? 192 << 20 : 500 << 20,
     readAvailableMemory: MemoryInfo.getFreePhysicalMemorySize,
     setLimit: (bytes) =>
         PaintingBinding.instance.imageCache.maximumSizeBytes = bytes,
@@ -2005,6 +2023,7 @@ class ReaderState extends State<Reader>
   }
 
   final _bangumiCompletedChapters = <String>{};
+  final _automaticChapterVisits = <String, int>{};
 
   void updateHistory() {
     // Initial layout and orientation can update the viewport before images
@@ -2023,6 +2042,7 @@ class ReaderState extends State<Reader>
       if (images!.isNotEmpty && history!.page >= images!.length) {
         _bangumiCompletedChapters.add(eid);
       }
+      _automaticChapterVisits[eid] = DateTime.now().millisecondsSinceEpoch;
       _session.scheduleProgress();
       // A content/animation completion can arrive after the reader's own exit
       // task returned while another owner is still preparing. Register the

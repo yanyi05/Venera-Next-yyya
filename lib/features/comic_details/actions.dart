@@ -369,6 +369,17 @@ abstract mixin class ComicPageActions {
             chapterTitles,
             List<int>.unmodifiable(downloaded),
             nextTen: nextTen,
+            protection: (i) => library.automaticChapterProtection(
+              target.id,
+              target.comicType,
+              chapterIds[i],
+            ),
+            protect: (i, value) => library.protectAutomaticChapter(
+              target.id,
+              target.comicType,
+              chapterIds[i],
+              value,
+            ),
             isCurrent: () =>
                 owner.mounted && admission.active && isComicActive(target),
           ),
@@ -509,9 +520,13 @@ class _SelectDownloadChapter extends StatefulWidget {
     this.downloadedEps, {
     required this.isCurrent,
     required this.nextTen,
+    this.protection,
+    this.protect,
   });
 
   final NextChapterDownloadPlan? Function() nextTen;
+  final bool? Function(int)? protection;
+  final void Function(int, bool)? protect;
   final List<String> eps;
   final List<int> downloadedEps;
   final bool Function() isCurrent;
@@ -621,7 +636,31 @@ class _SelectDownloadChapterState extends State<_SelectDownloadChapter> {
               padding: EdgeInsets.zero,
               itemCount: eps.length,
               itemBuilder: (context, i) {
+                final protected = downloaded.contains(i)
+                    ? widget.protection?.call(i)
+                    : null;
                 return CheckboxListTile(
+                  secondary: protected == null
+                      ? null
+                      : IconButton(
+                          tooltip: protected
+                              ? '已保护，不自动清理；点击取消保护'
+                              : '保护此智能预下载章节',
+                          icon: Icon(protected ? Icons.lock : Icons.lock_open),
+                          onPressed: !active
+                              ? null
+                              : () {
+                                  if (!_canSelect(generation)) return;
+                                  try {
+                                    widget.protect?.call(i, !protected);
+                                    setState(() {});
+                                  } catch (error) {
+                                    context.showMessage(
+                                      message: error.toString(),
+                                    );
+                                  }
+                                },
+                        ),
                   title: Text(eps[i]),
                   value: selected.contains(i) || downloaded.contains(i),
                   onChanged: !active || downloaded.contains(i)

@@ -1,8 +1,33 @@
 import 'dart:async';
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/app_runtime/background_sync.dart';
 
 void main() {
+  testWidgets(
+    'library checks defer until reading exit and stop cancels catch-up',
+    (tester) async {
+      var checks = 0;
+      final release = ReadingActivity.instance.enter();
+      final runtime = BackgroundSync(
+        startDataSync: () {},
+        stopDataSync: () {},
+        checkLibrary: () => checks++,
+        readingActivity: ReadingActivity.instance,
+      );
+      runtime.start();
+      expect(checks, 0);
+      release();
+      await tester.pump(const Duration(seconds: 2));
+      expect(checks, 1);
+      final again = ReadingActivity.instance.enter();
+      again();
+      runtime.stop();
+      await tester.pump(const Duration(seconds: 3));
+      expect(checks, 1);
+    },
+  );
+
   test('restart cancels old timer ownership and ignores stale ticks', () {
     var starts = 0;
     var stops = 0;

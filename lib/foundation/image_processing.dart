@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'reading_activity.dart';
 import 'image_crop_bands.dart';
 import 'dart:collection';
 import 'dart:ffi';
@@ -371,14 +372,22 @@ class _ImageScriptBridge {
 }
 
 final _imageScriptSlots = _AsyncSemaphore(4);
+final _readingImageScriptSlots = _AsyncSemaphore(1);
+_AsyncSemaphore get _activeImageScriptSlots =>
+    ReadingActivity.instance.isReading
+    ? _readingImageScriptSlots
+    : _imageScriptSlots;
+
+Future<T> runWithImageTransformSlot<T>(Future<T> Function() task) =>
+    _activeImageScriptSlots.run(task);
 
 @visibleForTesting
 Future<T> debugRunWithImageScriptSlot<T>(Future<T> Function() task) {
-  return _imageScriptSlots.run(task);
+  return _activeImageScriptSlots.run(task);
 }
 
 Future<Uint8List> modifyImageWithScript(Uint8List data, String script) async {
-  return _imageScriptSlots.run(() async {
+  return _activeImageScriptSlots.run(() async {
     final image = await Image.decodeImage(data);
     final initJs = await rootBundle.loadString('assets/init.js');
     return Isolate.run(

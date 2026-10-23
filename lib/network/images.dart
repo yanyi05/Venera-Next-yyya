@@ -421,35 +421,35 @@ abstract class ImageDownloader {
             if (expectedBytes == -1) {
               expectedBytes = null;
             }
-            var buffer = <int>[];
+            final buffer = BytesBuilder(copy: false);
             await for (var data in stream) {
               scope?.check();
-              buffer.addAll(data);
+              buffer.add(data);
               yield ImageDownloadProgress(
                 currentBytes: buffer.length,
                 totalBytes: expectedBytes,
               );
             }
 
+            var data = buffer.takeBytes();
             if (configs['onResponse'] is JSInvokable) {
-              buffer = await _applyImageResponseCallback(
+              final transformed = await _applyImageResponseCallback(
                 configs['onResponse'] as JSInvokable,
-                buffer,
+                data,
                 owner,
               );
-            }
-
-            Uint8List data;
-            if (buffer is Uint8List) {
-              data = buffer;
-            } else {
-              data = Uint8List.fromList(buffer);
-              buffer.clear();
+              data = transformed is Uint8List
+                  ? transformed
+                  : Uint8List.fromList(transformed);
             }
 
             // Preserve source bytes after transport decoding, before visual edits.
             scope?.check();
-            await CacheManager().writeCache('$cacheKey@original', data);
+            final hasVisualEdits =
+                configs['modifyImage'] != null || configs['cropBands'] != null;
+            if (hasVisualEdits) {
+              await CacheManager().writeCache('$cacheKey@original', data);
+            }
             scope?.check();
             if (configs['modifyImage'] != null) {
               var newData = await modifyImageWithScript(
@@ -468,7 +468,11 @@ abstract class ImageDownloader {
               ]);
             }
             scope?.check();
-            await CacheManager().writeCache(cacheKey, data);
+            if (hasVisualEdits) {
+              await CacheManager().writeCache(cacheKey, data);
+            } else {
+              await CacheManager().writeUnmodifiedCache(cacheKey, data);
+            }
             scope?.check();
             yield ImageDownloadProgress(
               currentBytes: data.length,

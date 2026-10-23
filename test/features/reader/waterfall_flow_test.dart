@@ -13,6 +13,30 @@ WaterfallChapterSegment segment(int chapter, int count) {
 void main() {
   group('WaterfallChapterFlow', () {
     test(
+      'bounded trim preserves image identity, offsets and reload before window',
+      () {
+        final flow = WaterfallChapterFlow(
+          segments: [for (var i = 1; i <= 30; i++) segment(i, 3)],
+        );
+        final position = flow.imageRefAt(46)!.position;
+        final removed = flow.trimAround(16, 17);
+        expect(removed, 39);
+        expect(flow.segments.map((s) => s.chapter), [14, 15, 16, 17, 18, 19]);
+        expect(flow.imageIndexOf(position), 7);
+        final restored = flow.imageRefAt(7)!.position;
+        expect(
+          (restored.chapter, restored.chapterId, restored.imageNumber),
+          (position.chapter, position.chapterId, position.imageNumber),
+        );
+        flow.addBefore(segment(13, 3));
+        expect(flow.imageIndexOf(position), 10);
+        for (var i = 1; i <= flow.imageCount; i++) {
+          expect(flow.imageIndexOf(flow.imageRefAt(i)!.position), i);
+        }
+      },
+    );
+
+    test(
       'source positions survive prepending and round trip to viewport indices',
       () {
         final flow = WaterfallChapterFlow(

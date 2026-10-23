@@ -1,4 +1,5 @@
 import 'cache_scan.dart';
+import 'reading_activity.dart';
 import 'log.dart';
 
 import 'package:crypto/crypto.dart';
@@ -48,6 +49,7 @@ class CacheManager {
   /// Finish accepted operations before closing SQLite. No new work is accepted.
   Future<void> dispose() {
     _closing = true;
+    ReadingActivity.instance.removeListener(_readingChanged);
     return _disposal ??= _operations.then((_) {
       _db.dispose();
       // Do not reopen the singleton while accepted writes are still draining.
@@ -77,6 +79,7 @@ class CacheManager {
       )
       ''');
       _db = database;
+      ReadingActivity.instance.addListener(_readingChanged);
     } catch (_) {
       database.dispose();
       rethrow;
@@ -108,6 +111,15 @@ class CacheManager {
     }
   }
 
+  void _readingChanged() {
+    if (!_closing && !ReadingActivity.instance.isReading) {
+      checkCache().catchError(
+        (Object error, StackTrace stack) =>
+            Log.error('Cache cleanup', error, stack),
+      );
+    }
+  }
+
   /// set cache size limit in MB
   void setLimitSize(int size) {
     if (_closing) throw StateError('CacheManager is closing');
@@ -120,7 +132,7 @@ class CacheManager {
     List<int> data, [
     int duration = 7 * 24 * 60 * 60 * 1000,
   ]) {
-    final bytes = List<int>.of(data);
+    final bytes = Uint8List.fromList(data);
     return _enqueue(() => _writeCache(key, bytes, duration));
   }
 
@@ -128,6 +140,7 @@ class CacheManager {
     String key,
     List<int> data, [
     int duration = 7 * 24 * 60 * 60 * 1000,
+    String? type,
   ]) async {
     await _delete(key);
     _directoryIndex = (_directoryIndex + 1) % 100;
@@ -139,13 +152,30 @@ class CacheManager {
     var expires = DateTime.now().millisecondsSinceEpoch + duration;
     _db.execute(
       '''
-      INSERT OR REPLACE INTO cache (key, dir, name, expires) VALUES (?, ?, ?, ?)
+      INSERT OR REPLACE INTO cache (key, dir, name, expires, type) VALUES (?, ?, ?, ?, ?)
     ''',
-      [key, dir.toString(), name, expires],
+      [key, dir.toString(), name, expires, type],
     );
     _currentSize += data.length;
-    if (_currentSize > _limitSize) await _checkCache();
+    if (_currentSize > _limitSize && !ReadingActivity.instance.isReading) {
+      await _checkCache();
+    }
   }
+
+  /// Raw bytes can serve as both display and restorable original without
+  /// duplicate files. Processed legacy entries never receive this marker.
+  Future<void> writeUnmodifiedCache(String key, Uint8List bytes) {
+    final owned = Uint8List.fromList(bytes);
+    return _enqueue(() async {
+      await _writeCache(key, owned, 7 * 24 * 60 * 60 * 1000, 'raw-image');
+    });
+  }
+
+  Future<File?> findUnmodifiedCache(String key) => _enqueue(() async {
+    final rows = _db.select('SELECT type FROM cache WHERE key = ?', [key]);
+    if (rows.isEmpty || rows.first['type'] != 'raw-image') return null;
+    return _findCache(key);
+  });
 
   /// Find cache by key.
   /// If cache is expired, it will be deleted and return null.
@@ -186,15 +216,17 @@ class CacheManager {
     }
     if (await file.exists()) {
       // update time
-      var expires = now + 7 * 24 * 60 * 60 * 1000;
-      _db.execute(
-        '''
+      final renewed = now + 7 * 24 * 60 * 60 * 1000;
+      if (renewed - expires >= const Duration(hours: 1).inMilliseconds) {
+        _db.execute(
+          '''
         UPDATE cache
         SET expires = ?
         WHERE key = ?
       ''',
-        [expires, key],
-      );
+          [renewed, key],
+        );
+      }
       return file;
     } else {
       _db.execute(
@@ -214,6 +246,7 @@ class CacheManager {
   Future<void> checkCache() => _enqueue(_checkCache);
 
   Future<void> _checkCache() async {
+    if (ReadingActivity.instance.isReading) return;
     var res = _db.select(
       '''
         SELECT * FROM cache
@@ -222,6 +255,7 @@ class CacheManager {
       [DateTime.now().millisecondsSinceEpoch],
     );
     for (var row in res) {
+      if (ReadingActivity.instance.isReading) return;
       var dir = row['dir'] as String;
       var name = row['name'] as String;
       var file = File('$_cachePath/$dir/$name');
@@ -241,7 +275,7 @@ class CacheManager {
       );
     }
 
-    while (_currentSize > _limitSize) {
+    while (_currentSize > _limitSize && !ReadingActivity.instance.isReading) {
       var res = _db.select('''
           SELECT * FROM cache
           ORDER BY expires ASC

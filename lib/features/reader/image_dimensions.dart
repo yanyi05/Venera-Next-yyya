@@ -64,14 +64,21 @@ class _ReaderImageDimensionsState extends State<ReaderImageDimensions> {
       (info, synchronous) {
         try {
           if (!mounted || !identical(_stream, stream)) return;
-          widget.onLoadState?.call(AutoReadingImageState.ready);
           final size = decodedOriginalSize(stream, info);
-          if (_size == size || !mounted) return;
-          if (synchronous) {
-            _size = size;
-          } else {
-            setState(() => _size = size);
+          if (_size != size) {
+            if (synchronous) {
+              _size = size;
+            } else {
+              setState(() => _size = size);
+            }
           }
+          // The image is usable for scrolling/zooming after its real geometry
+          // has reached the child, not just when a decoder callback arrives.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && identical(_stream, stream)) {
+              widget.onLoadState?.call(AutoReadingImageState.ready);
+            }
+          });
         } finally {
           info.dispose();
         }

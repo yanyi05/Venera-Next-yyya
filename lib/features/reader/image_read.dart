@@ -11,8 +11,10 @@ Future<Uint8List?> readReaderImageBytes(
   if (image.imageKey.startsWith('file://')) {
     return File(image.imageKey.substring(7)).readAsBytes();
   }
-  final file = await CacheManager().findCache(
-    original ? '${image.cacheKey}@original' : image.cacheKey,
-  );
+  final cache = CacheManager();
+  final file = original
+      ? await cache.findUnmodifiedCache(image.cacheKey) ??
+            await cache.findCache('${image.cacheKey}@original')
+      : await cache.findCache(image.cacheKey);
   return file?.readAsBytes();
 }

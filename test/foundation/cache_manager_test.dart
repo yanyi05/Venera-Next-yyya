@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/foundation/cache_manager.dart';
 import 'package:venera_next/foundation/cache_scan.dart';
@@ -21,6 +23,41 @@ import 'package:venera_next/foundation/cache_scan.dart';
 }
 
 void main() {
+  test(
+    'raw cache shares display/original file and processed bytes are never originals',
+    () async {
+      final f = fixture();
+      await f.manager.writeUnmodifiedCache(
+        'page',
+        Uint8List.fromList([1, 2, 3]),
+      );
+      expect(
+        (await f.manager.findCache('page'))!.path,
+        (await f.manager.findUnmodifiedCache('page'))!.path,
+      );
+      expect(f.manager.currentSize, 3);
+      await f.manager.writeCache('page', [4, 5]);
+      expect(await f.manager.findUnmodifiedCache('page'), isNull);
+    },
+  );
+  test(
+    'cache eviction is deferred while reading, then runs after release',
+    () async {
+      final f = fixture();
+      f.manager.setLimitSize(0);
+      final release = ReadingActivity.instance.enter();
+      try {
+        await f.manager.writeCache('page', [1, 2, 3]);
+        await f.manager.checkCache();
+        expect(await f.manager.findCache('page'), isNotNull);
+      } finally {
+        release();
+      }
+      await f.manager.checkCache();
+      expect(await f.manager.findCache('page'), isNull);
+    },
+  );
+
   test('construction does not scan and start shares one scan', () async {
     var scans = 0;
     final gate = Completer<CacheScanResult>();

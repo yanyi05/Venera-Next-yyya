@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/appbar.dart';
 import 'package:venera_next/foundation/context.dart';
-import 'package:venera_next/features/comic_source/models.dart';
+import 'package:venera_next/features/comic_source/comic_source_api.dart';
 import 'bangumi_client.dart';
 import 'bangumi_service.dart';
 import 'bangumi_page.dart';

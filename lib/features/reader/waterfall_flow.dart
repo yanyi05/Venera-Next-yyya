@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'image_position.dart';
 
 class WaterfallImageRef {
@@ -41,20 +42,48 @@ class WaterfallChapterFlow implements WaterfallFlowView {
   WaterfallChapterFlow({List<WaterfallChapterSegment>? segments}) {
     if (segments != null) {
       _segments.addAll(segments);
+      _reindex();
     }
   }
 
   final _segments = <WaterfallChapterSegment>[];
+  final _offsets = <int, int>{};
+  final _byChapter = <int, WaterfallChapterSegment>{};
+  int _imageCount = 0;
+  void _reindex() {
+    _offsets.clear();
+    _byChapter.clear();
+    _imageCount = 0;
+    for (final segment in _segments) {
+      _offsets[segment.chapter] = _imageCount;
+      _byChapter[segment.chapter] = segment;
+      _imageCount += segment.images.length;
+    }
+  }
+
+  /// Trim only distant metadata. The view supplies every visible chapter and
+  /// restores the same image/offset after the leading indices change.
+  int trimAround(int first, int last, {int neighbours = 2}) {
+    var removedBefore = 0;
+    _segments.removeWhere((segment) {
+      if (segment.chapter < first - neighbours) {
+        removedBefore += segment.images.length;
+        return true;
+      }
+      return segment.chapter > last + neighbours;
+    });
+    _reindex();
+    return removedBefore;
+  }
 
   @override
-  List<WaterfallChapterSegment> get segments => List.unmodifiable(_segments);
+  List<WaterfallChapterSegment> get segments => UnmodifiableListView(_segments);
 
   @override
   bool get isEmpty => _segments.isEmpty;
 
   @override
-  int get imageCount =>
-      _segments.fold(0, (value, segment) => value + segment.images.length);
+  int get imageCount => _imageCount;
 
   @override
   int? get firstChapter => _segments.firstOrNull?.chapter;
@@ -63,30 +92,34 @@ class WaterfallChapterFlow implements WaterfallFlowView {
   int? get lastChapter => _segments.lastOrNull?.chapter;
 
   @override
-  WaterfallChapterSegment? segmentOfChapter(int chapter) {
-    for (var segment in _segments) {
-      if (segment.chapter == chapter) return segment;
-    }
-    return null;
-  }
+  WaterfallChapterSegment? segmentOfChapter(int chapter) => _byChapter[chapter];
 
   @override
   WaterfallImageRef? imageRefAt(int index) {
     if (index <= 0) return null;
-    var remaining = index;
-    for (var segment in _segments) {
-      if (remaining <= segment.images.length) {
-        return WaterfallImageRef(
-          position: ReaderImagePosition(
-            chapter: segment.chapter,
-            imageNumber: remaining,
-            chapterId: segment.eid,
-          ),
-          imageKey: segment.images[remaining - 1],
-          isFirstInSegment: remaining == 1,
-        );
+    var low = 0, high = _segments.length - 1;
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      final segment = _segments[mid];
+      final offset = _offsets[segment.chapter]!;
+      if (index <= offset) {
+        high = mid - 1;
+        continue;
       }
-      remaining -= segment.images.length;
+      final remaining = index - offset;
+      if (remaining > segment.images.length) {
+        low = mid + 1;
+        continue;
+      }
+      return WaterfallImageRef(
+        position: ReaderImagePosition(
+          chapter: segment.chapter,
+          imageNumber: remaining,
+          chapterId: segment.eid,
+        ),
+        imageKey: segment.images[remaining - 1],
+        isFirstInSegment: remaining == 1,
+      );
     }
     return null;
   }
@@ -94,18 +127,13 @@ class WaterfallChapterFlow implements WaterfallFlowView {
   @override
   int? imageIndexOf(ReaderImagePosition position) {
     if (position.imageNumber <= 0) return null;
-    var index = 1;
-    for (var segment in _segments) {
-      if (segment.chapter == position.chapter) {
-        if (segment.eid != position.chapterId ||
-            position.imageNumber > segment.images.length) {
-          return null;
-        }
-        return index + position.imageNumber - 1;
-      }
-      index += segment.images.length;
+    final segment = _byChapter[position.chapter];
+    if (segment == null ||
+        segment.eid != position.chapterId ||
+        position.imageNumber > segment.images.length) {
+      return null;
     }
-    return null;
+    return _offsets[position.chapter]! + position.imageNumber;
   }
 
   bool shouldLoadAfter({
@@ -128,12 +156,14 @@ class WaterfallChapterFlow implements WaterfallFlowView {
     if (_segments.any((item) => item.chapter == segment.chapter)) return;
     _segments.add(segment);
     _segments.sort((a, b) => a.chapter.compareTo(b.chapter));
+    _reindex();
   }
 
   int addBefore(WaterfallChapterSegment segment) {
     if (_segments.any((item) => item.chapter == segment.chapter)) return 0;
     _segments.add(segment);
     _segments.sort((a, b) => a.chapter.compareTo(b.chapter));
+    _reindex();
     return segment.images.length;
   }
 
@@ -141,5 +171,6 @@ class WaterfallChapterFlow implements WaterfallFlowView {
     _segments
       ..clear()
       ..add(segment);
+    _reindex();
   }
 }

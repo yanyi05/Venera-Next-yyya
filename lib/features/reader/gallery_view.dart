@@ -77,6 +77,8 @@ class GalleryModeState extends State<ReaderGalleryView>
     data.comicId,
     data.chapterId,
     page,
+    enableResize: true,
+    decodePixelLimit: 12 * 1024 * 1024,
     reloadRevision: data.imageRefreshRevision,
   );
 
@@ -153,8 +155,8 @@ class GalleryModeState extends State<ReaderGalleryView>
     if (data.isCommentsPage(page)) return result(AutoReadingImageState.ready);
     final photo = photoViewControllers[page];
     final initialScale = photo?.getInitialScale?.call();
-    if (initialScale != null &&
-        ((photo?.scale ?? initialScale) - initialScale).abs() > 0.01) {
+    if (initialScale == null) return result(AutoReadingImageState.loading);
+    if (((photo?.scale ?? initialScale) - initialScale).abs() > 0.01) {
       return result(AutoReadingImageState.blocked);
     }
     final (start, end) = getPageImagesRange(page);
