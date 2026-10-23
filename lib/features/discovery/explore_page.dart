@@ -1,4 +1,3 @@
-import 'package:venera_next/foundation/operation_failure.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'dart:async';
@@ -39,6 +38,13 @@ class _ExplorePageState extends State<ExplorePage>
 
   late List<String> pages;
 
+  ComicSourceManager? _sources;
+
+  void _onRegistryChanged() {
+    onSettingsChanged();
+    if (mounted) setState(() {});
+  }
+
   void onSettingsChanged() {
     var explorePages = GlobalPreferenceStore(
       appdata.settings,
@@ -49,15 +55,23 @@ class _ExplorePageState extends State<ExplorePage>
         .toList();
     explorePages = explorePages.where((e) => all.contains(e)).toList();
     if (!pages.isEqualTo(explorePages)) {
+      final previous = controller;
+      final selected = pages.elementAtOrNull(controller.index);
       setState(() {
         pages = explorePages;
-        controller = TabController(length: pages.length, vsync: this);
+        final selectedIndex = pages.indexOf(selected ?? '');
+        controller = TabController(
+          length: pages.length,
+          vsync: this,
+          initialIndex: selectedIndex < 0 ? 0 : selectedIndex,
+        );
       });
+      previous.dispose();
     }
   }
 
   void onNaviItemTapped(int index) {
-    if (index == 2) {
+    if (index == 2 && pages.isNotEmpty) {
       int page = controller.index;
       String currentPageId = pages[page];
       GlobalState.find<_SingleExplorePageState>(currentPageId).toTop();
@@ -82,6 +96,8 @@ class _ExplorePageState extends State<ExplorePage>
     pages = pages.where((e) => all.contains(e)).toList();
     controller = TabController(length: pages.length, vsync: this);
     appdata.settings.addListener(onSettingsChanged);
+    _sources = ComicSourceManager.current;
+    _sources?.addListener(_onRegistryChanged);
     NaviPane.of(context).addNaviItemTapListener(onNaviItemTapped);
     super.initState();
   }
@@ -95,12 +111,14 @@ class _ExplorePageState extends State<ExplorePage>
   @override
   void dispose() {
     controller.dispose();
+    _sources?.removeListener(_onRegistryChanged);
     appdata.settings.removeListener(onSettingsChanged);
     naviPane?.removeNaviItemTapListener(onNaviItemTapped);
     super.dispose();
   }
 
   void refresh() {
+    if (pages.isEmpty) return;
     int page = controller.index;
     String currentPageId = pages[page];
     GlobalState.find<_SingleExplorePageState>(currentPageId).refresh();
@@ -271,9 +289,12 @@ class _SingleExplorePage extends StatefulWidget {
 
 class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
     with AutomaticKeepAliveClientMixin<_SingleExplorePage> {
-  late final ExplorePageData data;
-
-  late final String comicSourceKey;
+  ExplorePageData? _data;
+  ExplorePageData get data => _data!;
+  String comicSourceKey = '';
+  ComicSource? _source;
+  ComicSourceManager? _sources;
+  PageStorageBucket _storage = PageStorageBucket();
 
   bool _wantKeepAlive = true;
 
@@ -284,7 +305,35 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
   VoidCallback? reloadHandler;
 
   void onDataChanged() {
-    reloadHandler?.call();
+    (reloadHandler ?? refreshHandler)?.call();
+  }
+
+  bool _bindCurrentSource() {
+    ComicSource? source;
+    ExplorePageData? page;
+    for (final candidate in ComicSource.all()) {
+      for (final entry in candidate.explorePages) {
+        if (entry.title == widget.title) {
+          source = candidate;
+          page = entry;
+          break;
+        }
+      }
+      if (page != null) break;
+    }
+    if (identical(source, _source) && identical(page, _data)) return false;
+    _data?.changeListenable?.removeListener(onDataChanged);
+    _source = source;
+    _data = page;
+    comicSourceKey = source?.key ?? '';
+    refreshHandler = reloadHandler = null;
+    _storage = PageStorageBucket();
+    _data?.changeListenable?.addListener(onDataChanged);
+    return true;
+  }
+
+  void _onSourcesChanged() {
+    if (_bindCurrentSource() && mounted) setState(() {});
   }
 
   void onSettingsChanged() {
@@ -310,34 +359,35 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
   @override
   void initState() {
     super.initState();
-    for (var source in ComicSource.all()) {
-      for (var d in source.explorePages) {
-        if (d.title == widget.title) {
-          data = d;
-          comicSourceKey = source.key;
-          appdata.settings.addListener(onSettingsChanged);
-          data.changeListenable?.addListener(onDataChanged);
-          return;
-        }
-      }
-    }
-    throw OperationFailure.message("Explore Page ${widget.title} Not Found!");
+    _bindCurrentSource();
+    appdata.settings.addListener(onSettingsChanged);
+    _sources = ComicSourceManager.current;
+    _sources?.addListener(_onSourcesChanged);
   }
 
   @override
   void dispose() {
     appdata.settings.removeListener(onSettingsChanged);
-    data.changeListenable?.removeListener(onDataChanged);
+    _sources?.removeListener(_onSourcesChanged);
+    _data?.changeListenable?.removeListener(onDataChanged);
+    scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (_data == null) {
+      return Center(child: Text('漫画源已移除，请重新选择发现栏目'));
+    }
+    return PageStorage(bucket: _storage, child: _buildCurrentPage());
+  }
+
+  Widget _buildCurrentPage() {
     final sourceLoginAction = buildSourceLoginAction();
     if (data.loadMultiPart != null) {
       return _MultiPartExplorePage(
-        key: const PageStorageKey("comic_list"),
+        key: PageStorageKey((_source, data)),
         data: data,
         controller: scrollController,
         comicSourceKey: comicSourceKey,
@@ -352,7 +402,7 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
         loadPage: data.loadPage,
         loadNext: data.loadNext,
         errorAction: sourceLoginAction,
-        key: const PageStorageKey("comic_list"),
+        key: PageStorageKey((_source, data)),
         controller: scrollController,
         refreshHandlerCallback: (c) {
           refreshHandler = c;
@@ -365,7 +415,7 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
       return _MixedExplorePage(
         data,
         comicSourceKey,
-        key: const PageStorageKey("comic_list"),
+        key: PageStorageKey((_source, data)),
         controller: scrollController,
         refreshHandlerCallback: (c) {
           refreshHandler = c;
@@ -381,15 +431,23 @@ class _SingleExplorePageState extends AutomaticGlobalState<_SingleExplorePage>
 
   @override
   void refresh() {
-    final onRefresh = data.onRefresh;
+    final original = _data;
+    if (original == null) return;
+    final onRefresh = original.onRefresh;
     if (onRefresh == null) {
       refreshHandler?.call();
       return;
     }
     unawaited(
-      onRefresh().whenComplete(() {
-        reloadHandler?.call();
-      }),
+      Future<void>.sync(onRefresh)
+          .then((_) {
+            if (mounted && identical(original, _data)) reloadHandler?.call();
+          })
+          .catchError((Object error) {
+            if (mounted && identical(original, _data)) {
+              context.showMessage(message: '$error');
+            }
+          }),
     );
   }
 
@@ -560,6 +618,8 @@ class _MultiPartExplorePageState extends State<_MultiPartExplorePage> {
   List<ExplorePagePart>? parts;
 
   bool loading = true;
+  bool _pending = false;
+  int _generation = 0;
 
   String? message;
 
@@ -581,6 +641,8 @@ class _MultiPartExplorePageState extends State<_MultiPartExplorePage> {
   }
 
   void refresh() {
+    _generation++;
+    _pending = false;
     setState(() {
       loading = true;
       message = null;
@@ -603,18 +665,33 @@ class _MultiPartExplorePageState extends State<_MultiPartExplorePage> {
   }
 
   void load() async {
-    var res = await data.loadMultiPart!();
-    loading = false;
-    if (mounted) {
-      setState(() {
-        if (res.error) {
-          message = res.errorMessage;
-        } else {
-          parts = res.data;
-        }
-      });
-      storeState();
+    if (_pending) return;
+    _pending = true;
+    final generation = _generation;
+    Res<List<ExplorePagePart>> res;
+    try {
+      res = await data.loadMultiPart!();
+    } catch (error) {
+      res = Res.error('$error');
     }
+    if (!mounted || generation != _generation) return;
+    _pending = false;
+    setState(() {
+      loading = false;
+      if (res.error) {
+        message = res.errorMessage;
+      } else {
+        message = null;
+        parts = res.data;
+      }
+    });
+    storeState();
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    super.dispose();
   }
 
   @override
@@ -626,12 +703,7 @@ class _MultiPartExplorePageState extends State<_MultiPartExplorePage> {
       return NetworkError(
         message: message!,
         action: widget.errorAction,
-        retry: () {
-          setState(() {
-            loading = true;
-            message = null;
-          });
-        },
+        retry: refresh,
         withAppbar: false,
       );
     } else {
