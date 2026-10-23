@@ -41,6 +41,50 @@ void main() {
     },
   );
 
+  testWidgets('reordered items publish their stable logical destination IDs', (
+    tester,
+  ) async {
+    final pane = GlobalKey<NaviPaneState>();
+    final calls = <int>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NaviPane(
+          key: pane,
+          paneItems: [
+            PaneItemEntry(
+              label: 'Explore',
+              logicalIndex: 2,
+              icon: Icons.explore,
+              activeIcon: Icons.explore,
+            ),
+            PaneItemEntry(
+              label: 'Home',
+              logicalIndex: 0,
+              icon: Icons.home,
+              activeIcon: Icons.home,
+            ),
+          ],
+          paneActions: const [],
+          pageBuilder: (index) => Text('page $index'),
+          observer: NaviObserver(),
+          navigatorKey: GlobalKey<NavigatorState>(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    pane.currentState!.addNaviItemTapListener(calls.add);
+    pane.currentState!.updatePage(1);
+    await tester.pumpAndSettle();
+    expect(calls, [0]);
+    expect(find.text('page 1'), findsOneWidget);
+    pane.currentState!.updatePage(0);
+    await tester.pumpAndSettle();
+    expect(calls, [0, 2]);
+    expect(find.text('page 0'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('transition rebuilds do not retain curve status listeners', (
     tester,
   ) async {

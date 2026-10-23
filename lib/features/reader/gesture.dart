@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:venera_next/foundation/reader_preferences.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -415,11 +416,23 @@ class ReaderGestureDetectorState extends State<ReaderGestureDetector>
       final size = (context.findRenderObject()! as RenderBox).size;
       final coordinate = request.vertical ? local.dy : local.dx;
       final extent = request.vertical ? size.height : size.width;
-      if (coordinate < extent * 0.3 || coordinate > extent * 0.7) {
-        var forward = coordinate > extent * 0.7;
-        if (request.reversed) forward = !forward;
-        if (request.preferences.reverseTapToTurnPages) forward = !forward;
-        request.turnPage(forward);
+      final edge =
+          (1 - request.preferences.read(ReaderPreferences.tapCenterWidth)) / 2;
+      if (coordinate < extent * edge || coordinate > extent * (1 - edge)) {
+        final leading = coordinate < extent * edge;
+        final action = request.preferences.read(
+          leading
+              ? ReaderPreferences.leadingTapAction
+              : ReaderPreferences.trailingTapAction,
+        );
+        if (action == 'menu') {
+          widget.toggleMenu();
+        } else if (action != 'none') {
+          var forward = action == 'next';
+          if (request.reversed) forward = !forward;
+          if (request.preferences.reverseTapToTurnPages) forward = !forward;
+          request.turnPage(forward);
+        }
         return;
       }
     }

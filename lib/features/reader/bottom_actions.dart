@@ -37,9 +37,11 @@ List<Widget> buildReaderBottomActions(
   VoidCallback? onEditImageBannerCrop,
   VoidCallback? onRevalidateImage,
   VoidCallback? onVerifySourceCookie,
+  List<String>? actionOrder,
+  Set<String> hiddenActions = const {},
 }) {
-  return [
-    Semantics(
+  final actions = <String, Widget>{
+    'collect': Semantics(
       toggled: switch (imageFavoriteStatus) {
         ReaderImageFavoriteStatus.collected => true,
         ReaderImageFavoriteStatus.uncollected => false,
@@ -91,7 +93,7 @@ List<Widget> buildReaderBottomActions(
       ),
     ),
     if (onFullscreen != null)
-      Tooltip(
+      'fullscreen': Tooltip(
         message: "${"Full Screen".tl}(F12)",
         child: IconButton(
           icon: const Icon(Icons.fullscreen),
@@ -99,7 +101,7 @@ List<Widget> buildReaderBottomActions(
         ),
       ),
     if (onRotate != null)
-      Tooltip(
+      'rotate': Tooltip(
         message: "Screen Rotation".tl,
         child: IconButton(
           icon: Icon(switch (orientation) {
@@ -110,7 +112,7 @@ List<Widget> buildReaderBottomActions(
           onPressed: onRotate,
         ),
       ),
-    Tooltip(
+    'brightness': Tooltip(
       message: 'Reader brightness'.tl,
       child: IconButton(
         icon: Icon(brightnessEnabled ? Icons.brightness_4 : Icons.brightness_6),
@@ -118,7 +120,7 @@ List<Widget> buildReaderBottomActions(
         onPressed: onBrightness,
       ),
     ),
-    Tooltip(
+    'automatic': Tooltip(
       message: automaticReading.tooltip,
       child: IconButton(
         icon: Icon(
@@ -133,7 +135,7 @@ List<Widget> buildReaderBottomActions(
       ),
     ),
     if (onChapters != null)
-      Tooltip(
+      'chapters': Tooltip(
         message: "Chapters".tl,
         child: IconButton(
           icon: const Icon(Icons.library_books),
@@ -141,7 +143,7 @@ List<Widget> buildReaderBottomActions(
         ),
       ),
     if (onEditImageMask != null)
-      Tooltip(
+      'mask': Tooltip(
         message: 'Mask image area'.tl,
         child: IconButton(
           icon: const Icon(Icons.crop_free),
@@ -149,7 +151,7 @@ List<Widget> buildReaderBottomActions(
         ),
       ),
     if (onEditImageBannerCrop != null)
-      Tooltip(
+      'crop': Tooltip(
         message: '移除图片横向区域',
         child: IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -158,7 +160,7 @@ List<Widget> buildReaderBottomActions(
         ),
       ),
     if (onRevalidateImage != null)
-      Tooltip(
+      'reload': Tooltip(
         message: 'Reload image from source'.tl,
         child: IconButton(
           icon: const Icon(Icons.refresh),
@@ -166,20 +168,29 @@ List<Widget> buildReaderBottomActions(
         ),
       ),
     if (onVerifySourceCookie != null)
-      Tooltip(
+      'verify': Tooltip(
         message: 'Verify source cookies'.tl,
         child: IconButton(
           icon: const Icon(Icons.language),
           onPressed: onVerifySourceCookie,
         ),
       ),
-    Tooltip(
+    'save': Tooltip(
       message: "Save Image".tl,
       child: IconButton(icon: const Icon(Icons.download), onPressed: onSave),
     ),
-    Tooltip(
+    'share': Tooltip(
       message: "Share".tl,
       child: IconButton(icon: const Icon(Icons.share), onPressed: onShare),
     ),
+  };
+  // An active automatic-reader control remains available so it can be stopped.
+  final order = {...?actionOrder, ...actions.keys};
+  return [
+    for (final id in order)
+      if (actions.containsKey(id) &&
+          (!hiddenActions.contains(id) ||
+              (id == 'automatic' && automaticReading.active)))
+        actions[id]!,
   ];
 }

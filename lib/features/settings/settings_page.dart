@@ -1,3 +1,4 @@
+import 'interface_customization.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/features/bangumi/bangumi_page.dart';
 import 'package:venera_next/components/gesture.dart';
@@ -41,6 +42,7 @@ class _SettingsPageState extends State<SettingsPage> {
     "About",
     "Debug",
     "Bangumi",
+    "界面与按钮",
   ];
 
   final icons = <IconData>[
@@ -54,6 +56,7 @@ class _SettingsPageState extends State<SettingsPage> {
     Icons.info,
     Icons.bug_report,
     Icons.auto_stories_outlined,
+    Icons.dashboard_customize_outlined,
   ];
 
   @override
@@ -234,6 +237,7 @@ class _SettingsPageState extends State<SettingsPage> {
       7 => const AboutSettings(),
       8 => const DebugPage(),
       9 => const BangumiPage(),
+      10 => const InterfaceCustomizationSettings(),
       _ => throw UnimplementedError(),
     };
   }
@@ -261,6 +265,7 @@ class _SettingsDetailPage extends StatelessWidget {
       7 => const AboutSettings(),
       8 => const DebugPage(),
       9 => const BangumiPage(),
+      10 => const InterfaceCustomizationSettings(),
       _ => throw UnimplementedError(),
     };
   }

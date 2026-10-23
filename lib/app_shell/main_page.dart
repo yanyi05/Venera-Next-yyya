@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:venera_next/foundation/interface_customization.dart';
 import 'package:venera_next/features/discovery/discovery.dart';
 import 'package:venera_next/features/favorites/favorites.dart';
 import 'package:venera_next/features/search/search.dart';
@@ -54,38 +55,53 @@ class _MainPageState extends State<MainPage> {
   ];
 
   var index = 0;
+  late final _navigationOrder = InterfaceCustomization.read(
+    appdata.settings[InterfaceCustomization.storageKey],
+  ).navigationOrder;
+  int _pageId(int position) => InterfaceCustomization.navigationDefaults
+      .indexOf(_navigationOrder[position]);
 
   @override
   Widget build(BuildContext context) {
+    final entries = <PaneItemEntry>[
+      PaneItemEntry(
+        logicalIndex: 0,
+        label: 'Home'.tl,
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home,
+      ),
+      PaneItemEntry(
+        logicalIndex: 1,
+        label: 'Favorites'.tl,
+        icon: Icons.local_activity_outlined,
+        activeIcon: Icons.local_activity,
+      ),
+      PaneItemEntry(
+        logicalIndex: 2,
+        label: 'Explore'.tl,
+        icon: Icons.explore_outlined,
+        activeIcon: Icons.explore,
+      ),
+      PaneItemEntry(
+        logicalIndex: 3,
+        label: 'Categories'.tl,
+        icon: Icons.category_outlined,
+        activeIcon: Icons.category,
+      ),
+    ];
     return NaviPane(
-      initialPage: index,
+      initialPage: _navigationOrder.indexOf(
+        InterfaceCustomization.navigationDefaults[index],
+      ),
       observer: _observer,
       navigatorKey: _navigatorKey!,
       paneItems: [
-        PaneItemEntry(
-          label: 'Home'.tl,
-          icon: Icons.home_outlined,
-          activeIcon: Icons.home,
-        ),
-        PaneItemEntry(
-          label: 'Favorites'.tl,
-          icon: Icons.local_activity_outlined,
-          activeIcon: Icons.local_activity,
-        ),
-        PaneItemEntry(
-          label: 'Explore'.tl,
-          icon: Icons.explore_outlined,
-          activeIcon: Icons.explore,
-        ),
-        PaneItemEntry(
-          label: 'Categories'.tl,
-          icon: Icons.category_outlined,
-          activeIcon: Icons.category,
-        ),
+        for (final id in _navigationOrder)
+          entries[InterfaceCustomization.navigationDefaults.indexOf(id)],
       ],
       onPageChanged: (i) {
         setState(() {
-          index = i;
+          index = _pageId(i);
         });
       },
       paneActions: [
@@ -106,7 +122,7 @@ class _MainPageState extends State<MainPage> {
         ),
       ],
       pageBuilder: (index) {
-        return _pages[index];
+        return _pages[_pageId(index)];
       },
     );
   }

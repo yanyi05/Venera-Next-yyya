@@ -4,6 +4,7 @@ const appDataLocalFields = {
   'proxy',
   'bangumiPendingProgress',
   'smartDownloads',
+  'interfaceCustomization',
   'authorizationRequired',
   'customImageProcessing',
   'webdav',

@@ -60,6 +60,7 @@ class _Fixture {
       reverse = false,
       reverseTap = false;
   var longPress = 'zoom';
+  var custom = <String, Object?>{};
   ReaderGesturePort? port;
   ReaderGestureRequest request() {
     final original = identity;
@@ -73,6 +74,7 @@ class _Fixture {
           'enableTapToTurnPages': true,
           'reverseTapToTurnPages': reverseTap,
           'longPressAction': longPress,
+          ...custom,
         },
       ),
       vertical: vertical,
@@ -220,6 +222,40 @@ void main() {
     expect(f.calls, ['next']);
     await f.dispose(tester);
   });
+
+  for (final vertical in [false, true]) {
+    testWidgets(
+      'custom regions keep a central escape and respect edge actions; vertical=$vertical',
+      (tester) async {
+        final f = _Fixture()
+          ..doubleTap = false
+          ..vertical = vertical;
+        f.custom = {
+          'tapCenterWidth': 0.6,
+          'leadingTapAction': 'none',
+          'trailingTapAction': 'menu',
+        };
+        await f.mount(tester);
+        Offset at(double offset) =>
+            f.center(tester) +
+            (vertical ? Offset(0, offset) : Offset(offset, 0));
+        await tester.tapAt(at(-170));
+        expect(f.calls, isEmpty);
+        await tester.tapAt(at(100));
+        expect(f.calls, ['menu']);
+        f.menu = false;
+        f.calls.clear();
+        await tester.tapAt(at(170));
+        expect(f.calls, ['menu']);
+        f.menu = false;
+        f.calls.clear();
+        f.custom = {'tapCenterWidth': 0.2, 'trailingTapAction': 'previous'};
+        await tester.tapAt(at(100));
+        expect(f.calls, ['previous']);
+        await f.dispose(tester);
+      },
+    );
+  }
 
   for (final vertical in [false, true]) {
     for (final reversed in [false, true]) {

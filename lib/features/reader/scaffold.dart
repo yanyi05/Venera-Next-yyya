@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:venera_next/foundation/interface_customization.dart';
+import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/components/settings_save_state.dart';
 
 import 'package:venera_next/features/reader/status_info.dart';
@@ -493,8 +495,13 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
       });
     }
 
+    final customization = InterfaceCustomization.read(
+      appdata.settings[InterfaceCustomization.storageKey],
+    );
     final buttons = buildReaderBottomActions(
       context,
+      actionOrder: customization.toolbarOrder,
+      hiddenActions: customization.hiddenToolbar,
       imageFavoriteStatus: _favorites.status,
       imageCollecting: _favorites.collecting,
       onCollect: _favorites.canCollect ? addImageFavorite : null,

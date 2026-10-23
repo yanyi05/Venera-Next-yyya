@@ -170,6 +170,23 @@ abstract final class ReaderPreferences {
     'autoReadingPauseOnLongPress',
     true,
   );
+  static const tapCenterWidth = NumericPreference(
+    'tapCenterWidth',
+    0.4,
+    min: 0.2,
+    max: 0.6,
+    step: 0.1,
+  );
+  static const leadingTapAction = ChoicePreference(
+    'leadingTapAction',
+    'previous',
+    ['previous', 'next', 'menu', 'none'],
+  );
+  static const trailingTapAction = ChoicePreference(
+    'trailingTapAction',
+    'next',
+    ['previous', 'next', 'menu', 'none'],
+  );
   static const enableTapToTurnPages = BoolPreference(
     'enableTapToTurnPages',
     true,
@@ -256,6 +273,9 @@ abstract final class ReaderPreferences {
     autoReadingSkipUnavailableImages,
     autoReadingImageWaitSeconds,
     autoReadingPauseOnLongPress,
+    tapCenterWidth,
+    leadingTapAction,
+    trailingTapAction,
     enableTapToTurnPages,
     reverseTapToTurnPages,
     enablePageAnimation,

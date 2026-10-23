@@ -679,6 +679,35 @@ class _ReaderSettingsState extends SettingsSaveState<ReaderSettings> {
             comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
             useDeviceSettings: useDeviceSpecificSettings,
           ).toSliver(),
+          SliderSetting.reader(
+            title: '点击中央菜单区域宽度',
+            preference: ReaderPreferences.tapCenterWidth,
+            valueFormatter: (value) => '${(value * 100).round()}%',
+            comicId: isEnabledSpecificSettings ? widget.comicId : null,
+            comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
+            useDeviceSettings: useDeviceSpecificSettings,
+            onChanged: () => widget.onChanged?.call('tapCenterWidth'),
+          ).toSliver(),
+          for (final entry in {
+            '上方／左侧点击': ReaderPreferences.leadingTapAction,
+            '下方／右侧点击': ReaderPreferences.trailingTapAction,
+          }.entries)
+            SelectSetting.reader(
+              title: entry.key,
+              preference: entry.value,
+              optionTranslation: const {
+                'previous': '上一页（随阅读方向）',
+                'next': '下一页（随阅读方向）',
+                'menu': '显示菜单',
+                'none': '不操作',
+              },
+              comicId: isEnabledSpecificSettings ? widget.comicId : null,
+              comicSource: isEnabledSpecificSettings
+                  ? widget.comicSource
+                  : null,
+              useDeviceSettings: useDeviceSpecificSettings,
+              onChanged: () => widget.onChanged?.call(entry.value.key),
+            ).toSliver(),
           SwitchSetting.reader(
             title: "Show Chapter Comments".tl,
             preference: ReaderPreferences.showChapterComments,

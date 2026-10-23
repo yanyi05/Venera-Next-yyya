@@ -15,6 +15,7 @@ import 'consts.dart';
 import 'gesture.dart';
 
 class PaneItemEntry {
+  final int? logicalIndex;
   String label;
 
   IconData icon;
@@ -22,6 +23,7 @@ class PaneItemEntry {
   IconData activeIcon;
 
   PaneItemEntry({
+    this.logicalIndex,
     required this.label,
     required this.icon,
     required this.activeIcon,
@@ -120,7 +122,7 @@ class NaviPaneState extends State<NaviPane>
 
   void updatePage(int index) {
     for (var listener in _naviItemTapListeners) {
-      listener(index);
+      listener(widget.paneItems[index].logicalIndex ?? index);
     }
     if (widget.observer.routes.length > 1) {
       widget.navigatorKey.currentState!.popUntil((route) => route.isFirst);
