@@ -778,33 +778,22 @@ class ContinuousModeState extends State<ReaderContinuousView>
     }
   }
 
-  void _predownload(WaterfallImageRef image) {
-    if (image.imageKey.startsWith('file://')) return;
-    _imageDownloads.preload(
-      image.imageKey,
-      data.sourceKey,
-      data.comicId,
-      image.position.chapterId,
-    );
-  }
-
   void cacheImages(int current) {
     if (!mounted) return;
-    for (int i = current + 1; i <= current + preCacheCount; i++) {
-      if (crossChapter) {
-        var imageRef = _imageRefAt(i);
-        if (imageRef == null) continue;
-        var segment = _segmentOfChapter(imageRef.position.chapter);
-        if (segment != null &&
-            !segment.cached.contains(imageRef.position.imageNumber)) {
-          _predownload(imageRef);
-          segment.cached.add(imageRef.position.imageNumber);
-        }
-      } else if (i <= maxPage && !cached[i]) {
-        _predownload(_imageRefAt(i)!);
-        cached[i] = true;
+    final window = <(String, String?, String, String)>[];
+    for (var i = current + 1; i <= current + preCacheCount; i++) {
+      if (!crossChapter && i > maxPage) break;
+      final image = _imageRefAt(i);
+      if (image != null) {
+        window.add((
+          image.imageKey,
+          data.sourceKey,
+          data.comicId,
+          image.position.chapterId,
+        ));
       }
     }
+    _imageDownloads.preloadWindow(window);
   }
 
   Widget _buildFlowEnd(BuildContext context) {

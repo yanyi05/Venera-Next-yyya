@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/reading_energy.dart';
 import 'package:venera_next/features/history/history_scope.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'dart:async';
@@ -142,6 +143,7 @@ class Reader extends StatefulWidget {
 class ReaderState extends State<Reader>
     with ReaderImagePerPageHandler, WidgetsBindingObserver {
   VoidCallback? _releaseSyncReading;
+  Future<void> Function()? _releaseEnergyMonitor;
   final imageWork = ImageWork();
   late final imageFavorites = HistoryScope.readImages(context);
   final _targetValidity = ValueNotifier(0);
@@ -1402,6 +1404,9 @@ class ReaderState extends State<Reader>
   @override
   void initState() {
     _releaseSyncReading = ReadingActivity.instance.enter();
+    if (App.isIOS) {
+      _releaseEnergyMonitor = ReadingEnergyMonitor.platform.acquire();
+    }
     page = widget.initialPage ?? 1;
     if (page < 1) {
       page = 1;
@@ -1898,6 +1903,8 @@ class ReaderState extends State<Reader>
   @override
   void dispose() {
     _stateDisposed = true;
+    unawaited(_releaseEnergyMonitor?.call());
+    _releaseEnergyMonitor = null;
     _targetValidity.value++;
     viewportBinding.dispose();
     controller.dispose();

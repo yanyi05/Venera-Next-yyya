@@ -1045,6 +1045,7 @@
     "foundation/reader_preferences.dart",
     "foundation/reader_settings.dart",
     "foundation/reading_activity.dart",
+    "foundation/reading_energy.dart",
     "foundation/release_version.dart",
     "foundation/res.dart",
     "foundation/selection_operation.dart",

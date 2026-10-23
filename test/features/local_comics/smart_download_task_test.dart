@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/reading_energy.dart';
 import 'package:venera_next/foundation/reading_activity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/local_comics/images_download_task.dart';
@@ -9,6 +10,70 @@ import '../../support/comic_source_fixture.dart';
 class _Storage extends Fake implements DownloadTaskStorage {}
 
 void main() {
+  test(
+    'automatic download rechecks heat after yielding to a reader image',
+    () async {
+      final releaseImage = ReaderImagePriority.instance.enter();
+      final policy = ReadingEnergyPolicy.instance;
+      AutomaticDownloadGate.allowed = true;
+      final task = ImagesDownloadTask(
+        storage: _Storage(),
+        source: ComicSourceFixture(key: 'thermal-race'),
+        comicId: 'comic',
+        automatic: true,
+      );
+      try {
+        task.resume();
+        var finished = false;
+        final running = task.debugResumeFuture!.then((_) => finished = true);
+        await pumpEventQueue();
+        policy.update(2, false);
+        releaseImage();
+        await pumpEventQueue();
+        expect(finished, false);
+        expect(task.isError, false);
+        task.pauseForScheduling();
+        await running;
+      } finally {
+        releaseImage();
+        task.dispose();
+        policy.update(0, false);
+        AutomaticDownloadGate.allowed = false;
+      }
+    },
+  );
+
+  test(
+    'thermal wait is cancellable without marking automatic work user-paused',
+    () async {
+      final policy = ReadingEnergyPolicy.instance;
+      policy.update(2, false);
+      AutomaticDownloadGate.allowed = true;
+      final task = ImagesDownloadTask(
+        storage: _Storage(),
+        source: ComicSourceFixture(key: 'thermal-task'),
+        comicId: 'comic',
+        automatic: true,
+      );
+      try {
+        task.resume();
+        var finished = false;
+        final running = task.debugResumeFuture!.then((_) => finished = true);
+        await pumpEventQueue();
+        expect(finished, false);
+        expect(task.isError, false);
+        task.pauseForScheduling();
+        await running;
+        expect(task.canAutomaticallyResume, true);
+        expect(task.isError, false);
+      } finally {
+        task.dispose();
+        policy.update(0, false);
+        AutomaticDownloadGate.allowed = false;
+      }
+    },
+  );
+
   test(
     'paused task drains while reader priority blocks its metadata request',
     () async {

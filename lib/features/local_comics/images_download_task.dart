@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/reading_energy.dart';
 import 'package:venera_next/foundation/operation_failure.dart';
 import 'local_chapter_storage.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
@@ -166,6 +167,9 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   String get message {
     if (automatic && !isError) {
       if (_automaticUserPaused) return '智能预下载 · 已手动暂停';
+      if (ReadingEnergyPolicy.instance.deferAutomaticDownloads) {
+        return '智能预下载 · 等待设备降温或退出低电量模式';
+      }
       if (!AutomaticDownloadGate.allowed) return '智能预下载 · 等待网络／充电条件';
     }
     final value = isWaitingToRetry
@@ -285,10 +289,22 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       }
       return Res(
         await _retry!.run(() async {
-          if (ReaderImagePriority.instance.hasPendingImages) {
-            await ReaderImagePriority.instance.waitUntilIdle(
-              _runStopped.future,
-            );
+          while ((automatic &&
+                  ReadingEnergyPolicy.instance.deferAutomaticDownloads) ||
+              ReaderImagePriority.instance.hasPendingImages) {
+            if (automatic &&
+                ReadingEnergyPolicy.instance.deferAutomaticDownloads) {
+              await ReadingEnergyPolicy.instance.waitForAutomaticDownloads(
+                _runStopped.future,
+              );
+            }
+            if (!_isCurrentRun(generation)) break;
+            if (ReaderImagePriority.instance.hasPendingImages) {
+              await ReaderImagePriority.instance.waitUntilIdle(
+                _runStopped.future,
+              );
+            }
+            if (!_isCurrentRun(generation)) break;
           }
           if (!_isCurrentRun(generation)) {
             throw OperationFailure.message(
@@ -765,10 +781,24 @@ class _ImageDownloadWrapper {
   }
 
   Future<void> _download() async {
-    if (ReaderImagePriority.instance.hasPendingImages) {
-      if (!await ReaderImagePriority.instance.waitUntilIdle(_stopped.future)) {
-        return;
+    while ((task.automatic &&
+            ReadingEnergyPolicy.instance.deferAutomaticDownloads) ||
+        ReaderImagePriority.instance.hasPendingImages) {
+      if (task.automatic &&
+          ReadingEnergyPolicy.instance.deferAutomaticDownloads) {
+        if (!await ReadingEnergyPolicy.instance.waitForAutomaticDownloads(
+          _stopped.future,
+        )) {
+          return;
+        }
       }
+      if (isCancelled) return;
+      if (ReaderImagePriority.instance.hasPendingImages) {
+        if (!await ReaderImagePriority.instance.waitUntilIdle(_stopped.future)) {
+          return;
+        }
+      }
+      if (isCancelled) return;
     }
     if (isCancelled) return;
     int lastBytes = 0;

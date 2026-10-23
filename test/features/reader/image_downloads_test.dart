@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/reading_energy.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -10,6 +11,60 @@ import 'package:venera_next/network/images.dart';
 import 'package:venera_next/network/shared_image_requests.dart';
 
 void main() {
+  test(
+    'hot device waits; stale queued pages never start after a new window',
+    () async {
+      final policy = ReadingEnergyPolicy()..update(2, false);
+      final session = ImageWork();
+      final streams = <StreamController<ImageDownloadProgress>>[];
+      final loaded = <String>[];
+      final owner = ReaderImageDownloads(
+        work: session,
+        energyPolicy: policy,
+        maxConcurrent: 1,
+        loader: (image, _, _, _) {
+          loaded.add(image);
+          final stream = StreamController<ImageDownloadProgress>();
+          streams.add(stream);
+          return stream.stream;
+        },
+      );
+      owner.preloadWindow([
+        ('a', null, 'comic', 'chapter'),
+        ('b', null, 'comic', 'chapter'),
+      ]);
+      expect(loaded, isEmpty);
+      owner.preloadWindow([
+        ('x', null, 'comic', 'chapter'),
+        ('y', null, 'comic', 'chapter'),
+      ]);
+      await pumpEventQueue();
+      policy.update(0, false);
+      await pumpEventQueue();
+      expect(loaded, ['x']);
+      streams.first.add(
+        ImageDownloadProgress(
+          currentBytes: 1,
+          totalBytes: 1,
+          imageBytes: Uint8List(1),
+        ),
+      );
+      await pumpEventQueue();
+      expect(loaded, ['x', 'y']);
+      owner.preloadWindow([
+        ('x', null, 'comic', 'chapter'),
+        ('y', null, 'comic', 'chapter'),
+      ]);
+      expect(loaded, ['x', 'y']);
+      await owner.dispose();
+      await session.dispose();
+      for (final stream in streams) {
+        await stream.close();
+      }
+      policy.dispose();
+    },
+  );
+
   test(
     'prefetch waits for the previous stream cleanup before admitting another',
     () async {

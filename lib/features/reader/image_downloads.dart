@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/reading_energy.dart';
 import 'dart:async';
 
 import 'package:venera_next/foundation/log.dart';
@@ -14,11 +15,36 @@ class ReaderImageDownloads {
   ReaderImageDownloads({
     required ImageWork work,
     this.maxConcurrent = 2,
+    ReadingEnergyPolicy? energyPolicy,
     Stream<ImageDownloadProgress> Function(String, String?, String, String)?
     loader,
   }) : assert(maxConcurrent > 0),
        _work = work,
-       _loader = loader ?? ImageDownloader.loadComicImage;
+       _loader = loader ?? ImageDownloader.loadComicImage,
+       _energy = energyPolicy ?? ReadingEnergyPolicy.instance {
+    _energy.addListener(_admitPending);
+  }
+
+  final ReadingEnergyPolicy _energy;
+  Set<(String, String?, String, String)> _window = {};
+  final _windowCompleted = <(String, String?, String, String)>{};
+
+  /// Cancel only obsolete queued work. Already-started/shared transfers finish.
+  void preloadWindow(Iterable<(String, String?, String, String)> images) {
+    if (_disposal != null) return;
+    _window = images.where((key) => !key.$1.startsWith('file://')).toSet();
+    _windowCompleted.retainAll(_window);
+    for (final entry in _pending.entries) {
+      if (!_window.contains(entry.key) && !entry.value.ready.isCompleted) {
+        entry.value.task.cancel();
+      }
+    }
+    for (final key in _window) {
+      if (!_windowCompleted.contains(key)) {
+        preload(key.$1, key.$2, key.$3, key.$4);
+      }
+    }
+  }
 
   final int maxConcurrent;
   int _running = 0;
@@ -50,8 +76,11 @@ class ReaderImageDownloads {
 
   void _admitPending() {
     if (_disposal != null) return;
+    final limit = _energy.prefetchConcurrency < maxConcurrent
+        ? _energy.prefetchConcurrency
+        : maxConcurrent;
     for (final download in _pending.values) {
-      if (_running >= maxConcurrent) break;
+      if (_running >= limit) break;
       if (download.ready.isCompleted || download.scope.isCancelled) continue;
       _running++;
       download.ready.complete();
@@ -69,11 +98,12 @@ class ReaderImageDownloads {
       download.task.check();
       final stream = _loader(key.$1, key.$2, key.$3, key.$4);
       download.task.check();
-      await readImageStream(
+      final bytes = await readImageStream(
         stream,
         cancelSignal: download.scope.whenCancelled,
         checkStop: download.scope.check,
       );
+      if (bytes != null && _window.contains(key)) _windowCompleted.add(key);
     } on RequestCancelled {
       // Only this view's subscription is released on cancellation.
     } on ImageWorkTaskCancelled {
@@ -94,11 +124,23 @@ class ReaderImageDownloads {
       if (download.ready.isCompleted) _running--;
       download.task.finish();
       _admitPending();
+      if (download.task.isCancelled &&
+          _window.contains(key) &&
+          _disposal == null) {
+        scheduleMicrotask(() {
+          if (_disposal == null && _window.contains(key)) {
+            preload(key.$1, key.$2, key.$3, key.$4);
+          }
+        });
+      }
     }
   }
 
   Future<void> dispose() {
     if (_disposal != null) return _disposal!;
+    _energy.removeListener(_admitPending);
+    _window.clear();
+    _windowCompleted.clear();
     final pending = _pending.values.toList();
     final completion = Completer<void>();
     _disposal = completion.future;

@@ -422,13 +422,19 @@ abstract class ImageDownloader {
               expectedBytes = null;
             }
             final buffer = BytesBuilder(copy: false);
+            final progressClock = Stopwatch()..start();
+            var lastProgressMillis = -100;
             await for (var data in stream) {
               scope?.check();
               buffer.add(data);
-              yield ImageDownloadProgress(
-                currentBytes: buffer.length,
-                totalBytes: expectedBytes,
-              );
+              final nowMillis = progressClock.elapsedMilliseconds;
+              if (nowMillis - lastProgressMillis >= 100) {
+                lastProgressMillis = nowMillis;
+                yield ImageDownloadProgress(
+                  currentBytes: buffer.length,
+                  totalBytes: expectedBytes,
+                );
+              }
             }
 
             var data = buffer.takeBytes();

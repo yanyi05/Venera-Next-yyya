@@ -94,6 +94,7 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
     );
     final manualBands = ReaderImageBannerCrops.readBands(address);
     Uint8List? imageBytes;
+    var originalAlreadyLoaded = false;
     if (imageKey.startsWith('file://')) {
       final file = createLocalFile(imageKey.substring(7));
       final exists = await file.exists();
@@ -112,6 +113,7 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
     } else {
       if (manualBands != null) {
         imageBytes = await _readOriginal(address);
+        originalAlreadyLoaded = imageBytes != null;
         checkStop();
       }
       imageBytes ??= await readImageStream(
@@ -126,7 +128,9 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
         ),
       );
     }
-    if (manualBands != null && !imageKey.startsWith('file://')) {
+    if (manualBands != null &&
+        !imageKey.startsWith('file://') &&
+        !originalAlreadyLoaded) {
       imageBytes = await _readOriginal(address);
       checkStop();
     }

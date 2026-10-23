@@ -7,6 +7,7 @@ import Foundation // 添加此行
 @objc class AppDelegate: FlutterAppDelegate {
   private let directoryAccess = ScopedDirectoryAccess()
   private var directoryTerminationObserver: NSObjectProtocol?
+  private var readerEnergy: ReaderEnergyStream?
 
   // 定义插件通道名称
   private var directoryPicker: DirectoryPicker?
@@ -23,6 +24,11 @@ import Foundation // 添加此行
     guard let controller = window?.rootViewController as? FlutterViewController else {
           fatalError("rootViewController is not of type FlutterViewController")
     }
+
+    let energy = ReaderEnergyStream()
+    readerEnergy = energy
+    FlutterEventChannel(name: "venera/reader_energy", binaryMessenger: controller.binaryMessenger)
+      .setStreamHandler(energy)
 
     let methodChannel = FlutterMethodChannel(name: "venera/method_channel", binaryMessenger: controller.binaryMessenger)
     methodChannel.setMethodCallHandler { (call, result) in
@@ -92,4 +98,46 @@ import Foundation // 添加此行
     }
   }
 
+}
+
+
+/// Notifications are delivered on the main queue; no polling display link/timer.
+private final class ReaderEnergyStream: NSObject, FlutterStreamHandler {
+  private var observers: [NSObjectProtocol] = []
+  private var sink: FlutterEventSink?
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    stop()
+    sink = events
+    // Read thermalState before registering, as required by ProcessInfo.
+    _ = ProcessInfo.processInfo.thermalState
+    for name in [ProcessInfo.thermalStateDidChangeNotification,
+                 Notification.Name.NSProcessInfoPowerStateDidChange,
+                 UIApplication.didBecomeActiveNotification] {
+      observers.append(NotificationCenter.default.addObserver(
+        forName: name, object: nil, queue: .main
+      ) { [weak self] _ in self?.send() })
+    }
+    send()
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    stop()
+    return nil
+  }
+
+  private func send() {
+    let process = ProcessInfo.processInfo
+    sink?(["thermal": process.thermalState.rawValue,
+           "lowPower": process.isLowPowerModeEnabled])
+  }
+
+  private func stop() {
+    for observer in observers { NotificationCenter.default.removeObserver(observer) }
+    observers.removeAll()
+    sink = nil
+  }
+
+  deinit { stop() }
 }
