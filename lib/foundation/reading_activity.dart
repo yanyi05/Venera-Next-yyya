@@ -39,3 +39,36 @@ class ReadingActivity extends ChangeNotifier {
     };
   }
 }
+
+/// Admission gate for background work while reader images are loading.
+/// A lease covers file/cache reads and image processing, including failures.
+class ReaderImagePriority {
+  static final instance = ReaderImagePriority();
+  int _active = 0;
+  bool get hasPendingImages => _active > 0;
+  Completer<void>? _idle;
+
+  VoidCallback enter() {
+    if (_active++ == 0) _idle = Completer<void>();
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      if (--_active == 0) {
+        _idle!.complete();
+        _idle = null;
+      }
+    };
+  }
+
+  /// False means the waiting download was stopped. No polling or timer.
+  Future<bool> waitUntilIdle(Future<void> cancelled) async {
+    final stopped = cancelled.then((_) => false);
+    while (_active > 0) {
+      if (!await Future.any([_idle!.future.then((_) => true), stopped])) {
+        return false;
+      }
+    }
+    return true;
+  }
+}

@@ -1,7 +1,8 @@
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'package:venera_next/foundation/operation_failure.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
-import 'dart:async' show Future;
+import 'dart:async' show Future, StreamController;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/file_system.dart';
@@ -67,6 +68,20 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
 
   @override
   Future<Uint8List> load(chunkEvents, checkStop) async {
+    final release = ReadingActivity.instance.isReading
+        ? ReaderImagePriority.instance.enter()
+        : null;
+    try {
+      return await _loadForReader(chunkEvents, checkStop);
+    } finally {
+      release?.call();
+    }
+  }
+
+  Future<Uint8List> _loadForReader(
+    StreamController<ImageChunkEvent> chunkEvents,
+    void Function() checkStop,
+  ) async {
     checkStop();
     final address = ReaderImageAddress(
       imageKey: imageKey,

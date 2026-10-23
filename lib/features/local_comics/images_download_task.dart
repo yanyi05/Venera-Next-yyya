@@ -193,7 +193,10 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     notifyListeners();
   }
 
+  Completer<void> _runStopped = Completer<void>();
+
   void _stopRun() {
+    if (!_runStopped.isCompleted) _runStopped.complete();
     _runGeneration++;
     _isRunning = false;
     _currentSpeed = 0;
@@ -280,7 +283,22 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       if (!_isCurrentRun(generation)) {
         throw OperationFailure.message('Canceled', kind: FailureKind.cancelled);
       }
-      return Res(await _retry!.run(task, retryUnknown: true));
+      return Res(
+        await _retry!.run(() async {
+          if (ReaderImagePriority.instance.hasPendingImages) {
+            await ReaderImagePriority.instance.waitUntilIdle(
+              _runStopped.future,
+            );
+          }
+          if (!_isCurrentRun(generation)) {
+            throw OperationFailure.message(
+              'Canceled',
+              kind: FailureKind.cancelled,
+            );
+          }
+          return task();
+        }, retryUnknown: true),
+      );
     } catch (error, stack) {
       return Res.fromException(error, stack);
     }
@@ -340,6 +358,7 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       return;
     }
     if (_isRunning) return;
+    _runStopped = Completer<void>();
     final generation = ++_runGeneration;
     _retry = DownloadRetry(
       isActive: () => _isCurrentRun(generation),
@@ -702,6 +721,7 @@ class _ImageDownloadWrapper {
   String? error;
 
   bool isCancelled = false;
+  final _stopped = Completer<void>();
 
   StreamIterator<ImageDownloadProgress>? _imageIterator;
 
@@ -713,6 +733,7 @@ class _ImageDownloadWrapper {
   Future<void> cancel() {
     if (_cancellation != null) return _cancellation!;
     isCancelled = true;
+    _stopped.complete();
     final waitFutures = <Future<void>>[];
     final imageIterator = _imageIterator;
     if (imageIterator != null) {
@@ -744,6 +765,12 @@ class _ImageDownloadWrapper {
   }
 
   Future<void> _download() async {
+    if (ReaderImagePriority.instance.hasPendingImages) {
+      if (!await ReaderImagePriority.instance.waitUntilIdle(_stopped.future)) {
+        return;
+      }
+    }
+    if (isCancelled) return;
     int lastBytes = 0;
     String? unsupportedMime;
     final imageIterator = StreamIterator(

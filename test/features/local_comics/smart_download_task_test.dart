@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/reading_activity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/local_comics/images_download_task.dart';
 import 'package:venera_next/features/local_comics/download_task_storage.dart';
@@ -8,6 +9,33 @@ import '../../support/comic_source_fixture.dart';
 class _Storage extends Fake implements DownloadTaskStorage {}
 
 void main() {
+  test(
+    'paused task drains while reader priority blocks its metadata request',
+    () async {
+      final release = ReaderImagePriority.instance.enter();
+      final task = ImagesDownloadTask(
+        storage: _Storage(),
+        source: ComicSourceFixture(key: 'priority-task'),
+        comicId: 'comic',
+      );
+      try {
+        task.resume();
+        var finished = false;
+        final running = task.debugResumeFuture!.then((_) => finished = true);
+        await pumpEventQueue();
+        expect(finished, isFalse);
+        expect(task.isError, isFalse);
+        task.pause();
+        await running;
+        expect(task.isPaused, isTrue);
+        expect(task.isError, isFalse);
+      } finally {
+        task.dispose();
+        release();
+      }
+    },
+  );
+
   test('automatic provenance and manual pause survive task serialization', () {
     final source = ComicSourceFixture(key: 'smart-task');
     configureComicSourceRegistry(
