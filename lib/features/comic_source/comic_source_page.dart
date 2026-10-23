@@ -586,7 +586,7 @@ class _BodyState extends State<_Body> with SingleTickerProviderStateMixin {
 
   void help() {
     launchUrlString(
-      "https://github.com/CyrilPeng/venera-next/blob/main/doc/development/source_debugging.zh.md",
+      "https://github.com/yanyi05/Venera-Next-yyya/blob/reader-mask-tools/doc/development/source_debugging.zh.md",
     );
   }
 }

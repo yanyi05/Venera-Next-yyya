@@ -6,8 +6,8 @@ import 'package:venera_next/network/app_dio.dart';
 import 'sponsor_catalog.dart';
 
 const _sources = [
-  "https://cdn.jsdelivr.net/gh/CyrilPeng/venera-next@main/sponsors.json",
-  "https://raw.githubusercontent.com/CyrilPeng/venera-next/main/sponsors.json",
+  "https://cdn.jsdelivr.net/gh/yanyi05/Venera-Next-yyya@reader-mask-tools/sponsors.json",
+  "https://raw.githubusercontent.com/yanyi05/Venera-Next-yyya/reader-mask-tools/sponsors.json",
 ];
 
 typedef SponsorsLoader = Future<SponsorCatalog> Function();

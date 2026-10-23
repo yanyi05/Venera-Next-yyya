@@ -10,7 +10,7 @@ import 'package:venera_next/foundation/widget_utils.dart';
 import 'sponsor_catalog.dart';
 import 'sponsors_loader.dart';
 
-const _afdianUrl = "https://ifdian.net/a/cyril";
+const _projectUrl = "https://github.com/yanyi05/Venera-Next-yyya";
 
 class _TierStyle {
   const _TierStyle({required this.bold, required this.crown});
@@ -124,8 +124,8 @@ class _SponsorsPageState extends State<SponsorsPage> {
     children.add(
       Center(
         child: Button.filled(
-          onPressed: () => launchUrlString(_afdianUrl),
-          child: Text("Support on Afdian".tl),
+          onPressed: () => launchUrlString(_projectUrl),
+          child: Text("GitHub"),
         ).paddingVertical(24),
       ),
     );

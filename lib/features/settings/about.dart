@@ -124,7 +124,7 @@ class _AboutSettingsState extends State<AboutSettings> {
           title: const Text("Github"),
           trailing: const Icon(Icons.open_in_new),
           onTap: () {
-            launchUrlString("https://github.com/CyrilPeng/venera-next");
+            launchUrlString("https://github.com/yanyi05/Venera-Next-yyya");
           },
         ).toSliver(),
         ListTile(

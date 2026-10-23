@@ -134,7 +134,7 @@ class ApplicationUpdatePrompt {
                 Navigator.of(context).pop();
                 try {
                   await launchUrlString(
-                    'https://github.com/CyrilPeng/venera-next/releases',
+                    'https://github.com/yanyi05/Venera-Next-yyya/releases',
                   );
                 } catch (error, stack) {
                   Log.error('Open application release', error, stack);
