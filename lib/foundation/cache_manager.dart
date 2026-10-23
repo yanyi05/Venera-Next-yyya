@@ -353,6 +353,34 @@ class CacheManager {
     _currentSize -= fileSize;
   }
 
+  /// Summary of managed disposable cache only; never scans the download library.
+  Future<({int entries, int expired, int bytes})>
+  summary() => _enqueue(() async {
+    final rows = _db.select(
+      'SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN expires < ? THEN 1 ELSE 0 END), 0) AS expired FROM cache',
+      [DateTime.now().millisecondsSinceEpoch],
+    );
+    return (
+      entries: rows.first['total'] as int,
+      expired: rows.first['expired'] as int,
+      bytes: _currentSize,
+    );
+  });
+
+  String get managedDirectoryPath => _cachePath;
+
+  /// Remove only entries expired at admission; a newly active reader stops work.
+  Future<void> clearExpired() => _enqueue(() async {
+    final cutoff = DateTime.now().millisecondsSinceEpoch;
+    final rows = _db.select('SELECT key FROM cache WHERE expires < ?', [
+      cutoff,
+    ]);
+    for (final row in rows) {
+      if (ReadingActivity.instance.isReading) throw StateError('请退出阅读器后清理缓存');
+      await _delete(row['key'] as String);
+    }
+  });
+
   /// Delete all cache.
   Future<void> clear() => _enqueue(_clear);
 

@@ -1,3 +1,6 @@
+import 'cache_cleanup.dart';
+import 'package:venera_next/features/local_comics/local_comics.dart'
+    show LocalDownloadCleanupPage;
 import 'package:venera_next/foundation/app_sync_preferences.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'dart:async';
@@ -45,21 +48,20 @@ class _AppSettingsState extends State<AppSettings> {
           title: Text("Cache Size".tl),
           subtitle: Text(bytesToReadableString(CacheManager().currentSize)),
         ).toSliver(),
-        CallbackSetting(
-          title: "Clear Cache".tl,
-          actionTitle: "Clear".tl,
-          callback: () async {
-            await _tasks.run(
-              context,
-              task: (_) async {
-                await CacheManager().clear();
-                return null;
-              },
-              errorMessage: "Error".tl,
-              successMessage: "Cache cleared".tl,
-              onSuccess: () => setState(() {}),
-            );
+        ListTile(
+          title: const Text('缓存管理'),
+          subtitle: const Text('过期缓存、全部临时缓存和图片内存分别清理；保留本地下载'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () async {
+            await context.to(() => const CacheCleanupSettings());
+            if (mounted) setState(() {});
           },
+        ).toSliver(),
+        ListTile(
+          title: const Text('本地下载清理'),
+          subtitle: const Text('选择整本或章节删除，保留收藏和阅读记录'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.to(() => const LocalDownloadCleanupPage()),
         ).toSliver(),
         const CacheLimitSetting().toSliver(),
         const HistoryRetentionSetting().toSliver(),

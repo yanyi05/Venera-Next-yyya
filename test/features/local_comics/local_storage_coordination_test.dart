@@ -63,7 +63,10 @@ void main() {
       });
       await pumpEventQueue();
       expect(destination.listSync(), isEmpty);
-      expect(() => manager.addTask(_Task('too-early')), throwsStateError);
+      expect(
+        () => manager.addTask(_Task('too-early')),
+        throwsA(isA<LocalComicStorageBusy>()),
+      );
       gate.complete();
       await canceled;
       expect(await migrating, isNull);

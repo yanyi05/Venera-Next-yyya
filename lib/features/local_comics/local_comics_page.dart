@@ -1,3 +1,4 @@
+import 'local_download_cleanup_page.dart';
 import 'import_export/comic_export_service.dart';
 import 'package:venera_next/components/window_selection_task.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
@@ -241,6 +242,11 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     ];
 
     List<Widget> normalActions = [
+      IconButton(
+        tooltip: '本地下载清理',
+        icon: const Icon(Icons.cleaning_services_outlined),
+        onPressed: () => context.to(() => const LocalDownloadCleanupPage()),
+      ),
       const PdfImportTasksButton(),
       Tooltip(
         message: "Search".tl,

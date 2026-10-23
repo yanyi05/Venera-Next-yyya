@@ -24,6 +24,39 @@ import 'package:venera_next/foundation/cache_scan.dart';
 
 void main() {
   test(
+    'detailed cleanup removes only expired entries and retains downloaded files',
+    () async {
+      final f = fixture();
+      final download = File('${f.root.path}/local/book/page.jpg')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('download');
+      final history = File('${f.root.path}/history.marker')
+        ..writeAsStringSync('history');
+      await f.manager.writeCache('expired', [1, 2], -1000);
+      await f.manager.writeCache('live', [3, 4, 5]);
+      expect(await f.manager.summary(), (entries: 2, expired: 1, bytes: 5));
+      await f.manager.clearExpired();
+      expect(await f.manager.summary(), (entries: 1, expired: 0, bytes: 3));
+      expect(await f.manager.findCache('live'), isNotNull);
+      await f.manager.clear();
+      expect(await f.manager.summary(), (entries: 0, expired: 0, bytes: 0));
+      expect(download.readAsStringSync(), 'download');
+      expect(history.readAsStringSync(), 'history');
+    },
+  );
+  test('manual expired cleanup refuses deletion during reading', () async {
+    final f = fixture();
+    await f.manager.writeCache('expired', [1, 2], -1000);
+    final release = ReadingActivity.instance.enter();
+    try {
+      await expectLater(f.manager.clearExpired(), throwsStateError);
+      expect((await f.manager.summary()).entries, 1);
+    } finally {
+      release();
+    }
+  });
+
+  test(
     'raw cache shares display/original file and processed bytes are never originals',
     () async {
       final f = fixture();

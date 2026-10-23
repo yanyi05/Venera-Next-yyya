@@ -1,5 +1,6 @@
 import 'package:venera_next/foundation/operation_failure.dart';
 import 'local_comic_model.dart';
+import 'local_download_removal.dart';
 import 'local_repository.dart';
 import 'local_chapter_storage.dart';
 import 'local_deletion_paths.dart';
@@ -819,6 +820,63 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
     _downloadQueue.add(task);
   }
+
+  /// Manual download cleanup preserves related favorites and reading history.
+  /// Readers wait for the staged filesystem change; entry during staging aborts it.
+  Future<void> removeDownloadedContent(LocalDownloadRemoval removal) =>
+      ReadingActivity.instance.runMaintenance(
+        () => runWithExclusiveStorage(() async {
+          bool current() {
+            if (ReadingActivity.instance.isReading ||
+                !removal.matches(
+                  find(removal.comic.id, removal.comic.comicType),
+                )) {
+              return false;
+            }
+            return removal.selectedChapters.every(
+              (id) =>
+                  automaticChapterProtection(
+                    removal.comic.id,
+                    removal.comic.comicType,
+                    id,
+                  ) ==
+                  removal.protection[id],
+            );
+          }
+
+          void validate() {
+            if (!current()) {
+              throw StateError('下载内容或保护状态已变化，或正在阅读；请刷新后重新选择');
+            }
+          }
+
+          validate();
+          final comic = find(removal.comic.id, removal.comic.comicType)!;
+          if (removal.chapters != null) {
+            await _deleteComicChapters(
+              comic,
+              removal.chapters!,
+              canCommit: current,
+            );
+            return;
+          }
+          final snapshot = _repository.deletionSnapshot();
+          final directories = await _resolveDeletionDirectories(
+            [Directory(comic.baseDir)],
+            excluding: [comic],
+          );
+          await _deletionJournal.run(directories, (markCommitted) async {
+            runSqliteTransaction(_db, () {
+              validate();
+              _validateDeletionSnapshot(snapshot);
+              _repository.removeAll([comic]);
+              markCommitted();
+            });
+          });
+          _comicDirectories.remove((comic.id, comic.comicType.value));
+          notifyListeners();
+        }),
+      );
 
   Future<void> deleteComic(LocalComic c, [bool removeFileOnDisk = true]) =>
       runWithExclusiveStorage(() => _deleteComic(c, removeFileOnDisk));
