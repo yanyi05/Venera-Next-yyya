@@ -26,8 +26,42 @@ class _TestImage extends BaseImageProvider<_TestImage> {
   }
 }
 
+class _CappedReaderImage extends _TestImage {
+  @override
+  bool get resizeExtremeAspectRatios => true;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'reader caps long, wide and extreme images without upscaling small pages',
+    () {
+      final provider = _CappedReaderImage();
+      for (final dimensions in [
+        (1600, 15000),
+        (15000, 1600),
+        (1, 1000000000),
+        (1000000000, 1),
+        (4000, 6000),
+      ]) {
+        final (width, height) = dimensions;
+        final target = provider.debugTargetSize(width, height);
+        expect(target.width, greaterThanOrEqualTo(1));
+        expect(target.height, greaterThanOrEqualTo(1));
+        expect(
+          target.width! * target.height!,
+          lessThanOrEqualTo(provider.decodePixelLimit),
+        );
+        expect(target.width, lessThanOrEqualTo(width));
+        expect(target.height, lessThanOrEqualTo(height));
+      }
+      final small = provider.debugTargetSize(200, 300);
+      expect((small.width, small.height), (200, 300));
+      final oldThumbnail = _TestImage().debugTargetSize(1600, 15000);
+      expect((oldThumbnail.width, oldThumbnail.height), (1600, 15000));
+    },
+  );
 
   Future<Object?> resolveImage(_TestImage provider) async {
     final result = Completer<Object?>();

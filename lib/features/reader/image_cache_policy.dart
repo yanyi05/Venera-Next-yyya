@@ -23,6 +23,16 @@ class ReaderImageCachePolicy {
   final void Function(int bytes) setLimit;
   final void Function(Object, StackTrace) onError;
   final void Function(int availableBytes, int limit)? onConfigured;
+  bool _memoryPressure = false;
+
+  /// Keep a reduced budget for this reading session, including late queries.
+  void reduceForMemoryPressure() {
+    if (_disposed) return;
+    _memoryPressure = true;
+    ++_generation;
+    setLimit((defaultLimit ~/ 2).clamp(1, maxBytes));
+  }
+
   var _generation = 0;
   var _disposed = false;
 
@@ -32,7 +42,10 @@ class ReaderImageCachePolicy {
     try {
       final memory = await readAvailableMemory();
       if (_disposed || generation != _generation || memory == null) return;
-      final limit = limitForMemory(memory).clamp(defaultLimit, maxBytes);
+      final normalLimit = limitForMemory(memory).clamp(defaultLimit, maxBytes);
+      final limit = _memoryPressure
+          ? normalLimit.clamp(1, defaultLimit ~/ 2)
+          : normalLimit;
       setLimit(limit);
       onConfigured?.call(memory, limit);
     } catch (error, stack) {

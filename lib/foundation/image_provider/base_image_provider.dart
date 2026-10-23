@@ -104,6 +104,13 @@ abstract class BaseImageProvider<T extends BaseImageProvider<T>>
 
   int get decodePixelLimit => maxImagePixel;
 
+  /// Reader pages also cap extreme aspect ratios; thumbnails keep their policy.
+  bool get resizeExtremeAspectRatios => false;
+
+  @visibleForTesting
+  TargetImageSize debugTargetSize(int width, int height) =>
+      _getTargetSize(width, height);
+
   TargetImageSize _getTargetSize(int width, int height) {
     // ignore invalid size
     if (width <= 0 || height <= 0) {
@@ -111,16 +118,21 @@ abstract class BaseImageProvider<T extends BaseImageProvider<T>>
     }
     // ignore too wide or too tall image
     final imageRatio = width / height;
-    if (imageRatio > 2 || imageRatio < 0.5) {
+    if (!resizeExtremeAspectRatios && (imageRatio > 2 || imageRatio < 0.5)) {
       return TargetImageSize(width: width, height: height);
     }
     // resize if too large
     if (width * height > decodePixelLimit) {
       final ratio = sqrt(decodePixelLimit / (width * height));
-      return TargetImageSize(
-        width: (width * ratio).round(),
-        height: (height * ratio).round(),
+      final targetWidth = max(
+        1,
+        min(decodePixelLimit, (width * ratio).floor()),
       );
+      final targetHeight = max(
+        1,
+        min(decodePixelLimit ~/ targetWidth, (height * ratio).floor()),
+      );
+      return TargetImageSize(width: targetWidth, height: targetHeight);
     }
     return TargetImageSize(width: width, height: height);
   }

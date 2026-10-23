@@ -38,6 +38,9 @@ class ReaderImageProvider extends BaseImageProvider<ReaderImageProvider> {
 
   @override
   final int decodePixelLimit;
+
+  @override
+  bool get resizeExtremeAspectRatios => true;
   final int cropRevision;
   final String imageKey;
 

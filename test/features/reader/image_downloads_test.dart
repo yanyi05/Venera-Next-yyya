@@ -10,6 +10,50 @@ import 'package:venera_next/network/images.dart';
 import 'package:venera_next/network/shared_image_requests.dart';
 
 void main() {
+  test(
+    'prefetch waits for the previous stream cleanup before admitting another',
+    () async {
+      final session = ImageWork();
+      final cleanup = Completer<void>();
+      final streams = <StreamController<ImageDownloadProgress>>[];
+      final loaded = <String>[];
+      final owner = ReaderImageDownloads(
+        work: session,
+        maxConcurrent: 1,
+        loader: (image, _, _, _) {
+          loaded.add(image);
+          final stream = StreamController<ImageDownloadProgress>(
+            onCancel: streams.isEmpty ? () => cleanup.future : null,
+          );
+          streams.add(stream);
+          return stream.stream;
+        },
+      );
+      owner.preload('first', null, 'comic', 'chapter');
+      owner.preload('second', null, 'comic', 'chapter');
+      owner.preload('third', null, 'comic', 'chapter');
+      expect(loaded, ['first']);
+      streams.first.add(
+        ImageDownloadProgress(
+          currentBytes: 1,
+          totalBytes: 1,
+          imageBytes: Uint8List(1),
+        ),
+      );
+      await pumpEventQueue();
+      expect(loaded, ['first']);
+      cleanup.complete();
+      await pumpEventQueue();
+      expect(loaded, ['first', 'second']);
+      await owner.dispose();
+      expect(loaded, ['first', 'second']);
+      await session.dispose();
+      for (final stream in streams) {
+        await stream.close();
+      }
+    },
+  );
+
   ImageWork work() {
     final owner = ImageWork();
     addTearDown(owner.dispose);

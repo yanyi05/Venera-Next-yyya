@@ -13,18 +13,22 @@ import 'package:venera_next/foundation/image_work.dart';
 class ReaderImageDownloads {
   ReaderImageDownloads({
     required ImageWork work,
+    this.maxConcurrent = 2,
     Stream<ImageDownloadProgress> Function(String, String?, String, String)?
     loader,
-  }) : _work = work,
+  }) : assert(maxConcurrent > 0),
+       _work = work,
        _loader = loader ?? ImageDownloader.loadComicImage;
 
+  final int maxConcurrent;
+  int _running = 0;
   final ImageWork _work;
   final Stream<ImageDownloadProgress> Function(String, String?, String, String)
   _loader;
   final _pending =
       <
         (String, String?, String, String),
-        ({ImageWorkTask task, RequestScope scope})
+        ({ImageWorkTask task, RequestScope scope, Completer<void> ready})
       >{};
   Future<void>? _disposal;
 
@@ -38,16 +42,30 @@ class ReaderImageDownloads {
       scope.dispose();
       return;
     }
-    final download = (task: task, scope: scope);
+    final download = (task: task, scope: scope, ready: Completer<void>());
     _pending[key] = download;
+    _admitPending();
     unawaited(_download(key, download));
+  }
+
+  void _admitPending() {
+    if (_disposal != null) return;
+    for (final download in _pending.values) {
+      if (_running >= maxConcurrent) break;
+      if (download.ready.isCompleted || download.scope.isCancelled) continue;
+      _running++;
+      download.ready.complete();
+    }
   }
 
   Future<void> _download(
     (String, String?, String, String) key,
-    ({ImageWorkTask task, RequestScope scope}) download,
+    ({ImageWorkTask task, RequestScope scope, Completer<void> ready}) download,
   ) async {
     try {
+      if (!download.ready.isCompleted) {
+        await Future.any([download.ready.future, download.scope.whenCancelled]);
+      }
       download.task.check();
       final stream = _loader(key.$1, key.$2, key.$3, key.$4);
       download.task.check();
@@ -73,7 +91,9 @@ class ReaderImageDownloads {
     } finally {
       download.scope.dispose();
       _pending.remove(key);
+      if (download.ready.isCompleted) _running--;
       download.task.finish();
+      _admitPending();
     }
   }
 

@@ -1559,7 +1559,7 @@ class ReaderState extends State<Reader>
   }
 
   late final _imageCachePolicy = ReaderImageCachePolicy(
-    maxBytes: App.isIOS ? 192 << 20 : 500 << 20,
+    maxBytes: App.isIOS ? 128 << 20 : 500 << 20,
     readAvailableMemory: MemoryInfo.getFreePhysicalMemorySize,
     setLimit: (bytes) =>
         PaintingBinding.instance.imageCache.maximumSizeBytes = bytes,
@@ -1950,6 +1950,14 @@ class ReaderState extends State<Reader>
         ),
       );
     }
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    _imageCachePolicy.reduceForMemoryPressure();
+    // Drop reusable decoded cache entries; visible widgets retain their frames.
+    PaintingBinding.instance.imageCache.clear();
+    Log.info('Reader', 'Memory pressure: reduced decoded image cache budget');
   }
 
   @override

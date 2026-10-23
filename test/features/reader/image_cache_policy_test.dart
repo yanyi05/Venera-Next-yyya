@@ -4,6 +4,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/reader/image_cache_policy.dart';
 
 void main() {
+  test(
+    'memory pressure reduces budget and invalidates an in-flight query',
+    () async {
+      final query = Completer<int?>();
+      final limits = <int>[];
+      var calls = 0;
+      final policy = ReaderImageCachePolicy(
+        maxBytes: 128 << 20,
+        readAvailableMemory: () =>
+            calls++ == 0 ? query.future : Future.value(8 << 30),
+        setLimit: limits.add,
+        onError: (error, stack) => fail('$error'),
+      );
+      final pending = policy.configure();
+      policy.reduceForMemoryPressure();
+      query.complete(8 << 30);
+      await pending;
+      expect(limits, [50 << 20]);
+      await policy.configure();
+      expect(limits, [50 << 20, 50 << 20]);
+      policy.dispose();
+      policy.reduceForMemoryPressure();
+      expect(limits.last, 100 << 20);
+      expect(limits, hasLength(3));
+    },
+  );
+
   test('memory thresholds retain the existing cache limits', () {
     for (final entry in <int, int>{
       0: 100,
