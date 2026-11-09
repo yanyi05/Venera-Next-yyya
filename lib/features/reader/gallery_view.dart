@@ -1,3 +1,7 @@
+import 'reader_image_masks.dart';
+import 'package:venera_next/components/loading.dart';
+import 'resource_budget.dart';
+import 'reader_image_tools.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -77,7 +81,20 @@ class GalleryModeState extends State<ReaderGalleryView>
     data.comicId,
     data.chapterId,
     page,
-    reloadRevision: data.imageRefreshRevision,
+    reloadRevision:
+        data.imageRevisions['$key@${data.sourceKey}@${data.comicId}@${data.chapterId}'] ??
+        data.imageRefreshRevision,
+    crop: ReaderImageTools.cropForImage(
+      ReaderImageAddress(
+        imageKey: key,
+        sourceKey: data.sourceKey,
+        comicId: data.comicId,
+        chapterId: data.chapterId,
+      ),
+      data.crop,
+    ),
+    diagnostics: widget.imageWork.diagnostics,
+    decodePixelBudget: data.decodePixelBudget,
   );
 
   ReaderDisplayImageProvider _displayImage(String key) =>
@@ -105,6 +122,12 @@ class GalleryModeState extends State<ReaderGalleryView>
   @override
   void didUpdateWidget(covariant ReaderGalleryView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.data.preloadCount > 0 && data.preloadCount == 0) {
+      unawaited(_imageDownloads.dispose());
+      unawaited(_imagePrecache.dispose());
+      _imageDownloads = ReaderImageDownloads(work: widget.imageWork);
+      _imagePrecache = ReaderImagePrecache(work: widget.imageWork);
+    }
     if (!identical(oldWidget.data.content, data.content) ||
         !identical(oldWidget.imageWork, widget.imageWork)) {
       _singleImageStates.clear();
@@ -203,8 +226,9 @@ class GalleryModeState extends State<ReaderGalleryView>
     return (startIndex, endIndex);
   }
 
+  final _preloadPlan = ReaderPreloadPlan();
   void cache(int startPage) {
-    for (int i = startPage - 1; i <= startPage + preCacheCount; i++) {
+    for (final i in _preloadPlan.pages(startPage, preCacheCount, totalPages)) {
       if (i == startPage ||
           i <= 0 ||
           i > totalPages ||
@@ -309,8 +333,7 @@ class GalleryModeState extends State<ReaderGalleryView>
             if (shouldRefreshEInk && (i == 0 || i == totalPages + 1)) {
               widget.onChapterChanged();
             }
-            // Kept-alive neighbours reset when entered again, after their old
-            // PhotoView subtree has actually unmounted.
+            // Neighbours reset their zoom in place without discarding images.
             _longPressController = null;
             isLongPressing = false;
             if (mounted && !_disposed) setState(() {});
@@ -374,21 +397,38 @@ class GalleryModeState extends State<ReaderGalleryView>
             comicId: data.comicId,
             chapterId: data.chapterId,
           );
-          Widget photo([VoidCallback? _]) => PhotoView.customChild(
-            backgroundDecoration: decoration,
-            filterQuality: FilterQuality.medium,
-            controller: controller,
-            childSize: MediaQuery.sizeOf(context),
-            minScale: PhotoViewComputedScale.contained * 1.0,
-            maxScale: PhotoViewComputedScale.covered * 10.0,
-            child: ComicImage(
-              width: double.infinity,
-              height: double.infinity,
-              image: image,
-              fit: BoxFit.contain,
-              maskAddress: address,
-            ),
-          );
+          Widget photo([VoidCallback? reload]) =>
+              ReaderImageMasks.read(address).isEmpty
+              ? PhotoView(
+                  backgroundDecoration: decoration,
+                  filterQuality: FilterQuality.medium,
+                  controller: controller,
+                  imageProvider: image,
+                  fit: BoxFit.contain,
+                  loadingBuilder: _buildLoading,
+                  errorBuilder: (_, error, stack, retry) => NetworkError(
+                    message: error.toString(),
+                    retry: () {
+                      retry();
+                      reload?.call();
+                    },
+                  ),
+                )
+              : PhotoView.customChild(
+                  backgroundDecoration: decoration,
+                  filterQuality: FilterQuality.medium,
+                  controller: controller,
+                  childSize: MediaQuery.sizeOf(context),
+                  minScale: PhotoViewComputedScale.contained * 1.0,
+                  maxScale: PhotoViewComputedScale.covered * 10.0,
+                  child: ComicImage(
+                    width: MediaQuery.sizeOf(context).width,
+                    height: MediaQuery.sizeOf(context).height,
+                    image: image,
+                    fit: BoxFit.contain,
+                    maskAddress: address,
+                  ),
+                );
           return data.showImageDimensions || data.observeImageReadiness
               ? ReaderImageDimensions(
                   image: image,
@@ -414,6 +454,28 @@ class GalleryModeState extends State<ReaderGalleryView>
           child: buildPageImages(images),
         );
       },
+    );
+  }
+
+  Widget _buildLoading(BuildContext context, ImageChunkEvent? event) {
+    return PhotoView.customChild(
+      childSize: MediaQuery.of(context).size,
+      initialScale: PhotoViewComputedScale.contained,
+      minScale: PhotoViewComputedScale.contained * 1.0,
+      maxScale: PhotoViewComputedScale.covered * 10.0,
+      backgroundDecoration: BoxDecoration(color: context.colorScheme.surface),
+      child: Center(
+        child: SizedBox(
+          width: 20.0,
+          height: 20.0,
+          child: CircularProgressIndicator(
+            backgroundColor: context.colorScheme.surfaceContainerHigh,
+            value: event == null || event.expectedTotalBytes == null
+                ? null
+                : event.cumulativeBytesLoaded / event.expectedTotalBytes!,
+          ),
+        ),
+      ),
     );
   }
 
@@ -679,9 +741,8 @@ class GalleryModeState extends State<ReaderGalleryView>
   }
 }
 
-/// One page can remain mounted while a neighbouring page is selected. On
-/// re-entry a new zoom session replaces the old subtree and releases it in
-/// actual unmount order, without a time-based disposal heuristic.
+/// Keep a loaded neighbour's image mounted when it becomes active. Its zoom
+/// resets in place, and its controller is released only on actual unmount.
 class _GalleryPhotoPage extends StatefulWidget {
   const _GalleryPhotoPage({
     super.key,
@@ -697,39 +758,17 @@ class _GalleryPhotoPage extends StatefulWidget {
 }
 
 class _GalleryPhotoPageState extends State<_GalleryPhotoPage> {
-  int _visit = 0;
-  @override
-  void didUpdateWidget(covariant _GalleryPhotoPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!oldWidget.active && widget.active) _visit++;
-  }
-
-  @override
-  Widget build(BuildContext context) => _GalleryPhotoOwner(
-    key: ValueKey(_visit),
-    onController: widget.onController,
-    builder: widget.builder,
-  );
-}
-
-class _GalleryPhotoOwner extends StatefulWidget {
-  const _GalleryPhotoOwner({
-    super.key,
-    required this.onController,
-    required this.builder,
-  });
-  final void Function(PhotoViewController, bool) onController;
-  final Widget Function(BuildContext, PhotoViewController) builder;
-  @override
-  State<_GalleryPhotoOwner> createState() => _GalleryPhotoOwnerState();
-}
-
-class _GalleryPhotoOwnerState extends State<_GalleryPhotoOwner> {
   final controller = PhotoViewController();
   @override
   void initState() {
     super.initState();
     widget.onController(controller, true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _GalleryPhotoPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.active && widget.active) controller.reset();
   }
 
   @override

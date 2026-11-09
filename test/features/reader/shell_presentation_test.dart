@@ -58,6 +58,7 @@ void main() {
       var comments = false;
       var identity = Object();
       ReaderShellData data() => ReaderShellData(
+        chapterId: '1',
         comicId: 'synthetic',
         sourceKey: 'local',
         title: 'An illustrated journey through the mountains',

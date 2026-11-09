@@ -25,6 +25,7 @@ class RequestScope {
   static RequestScope? get current => Zone.current[_zoneKey] as RequestScope?;
   final RequestScope? _parent;
   final _children = <RequestScope>{};
+  final _cancellationAliases = <String>{};
   final _cancelled = Completer<void>();
   final cancelToken = CancelToken();
   Timer? _timer;
@@ -46,6 +47,19 @@ class RequestScope {
   void check() {
     if (isCancelled) throw _reason;
   }
+
+  /// A JS bridge can serialize a typed HTTP cancellation into a string. Only
+  /// aliases recorded by this scope's cancelled requests regain their type.
+  void recordCancellationAlias(String alias) {
+    if (!isCancelled) return;
+    _cancellationAliases.add(alias);
+    _parent?.recordCancellationAlias(alias);
+  }
+
+  Object normalizeCancellation(Object error) =>
+      isCancelled && error is String && _cancellationAliases.contains(error)
+      ? _reason
+      : error;
 
   Future<T> run<T>(FutureOr<T> Function() action) async {
     check();
@@ -83,5 +97,6 @@ class RequestScope {
   void dispose() {
     _timer?.cancel();
     _parent?._children.remove(this);
+    // Accepted JS Promises may still settle after their scope detaches.
   }
 }

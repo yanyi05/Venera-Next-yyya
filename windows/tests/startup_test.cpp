@@ -80,6 +80,16 @@ void TestStartupResults(const std::wstring& title) {
       Check(!IsIconic(primary.GetHandle()), "primary must be restored");
     }
     Check(IsWindow(primary.GetHandle()), "primary must survive secondary exit");
+    ShowWindow(primary.GetHandle(), SW_HIDE);
+    Check(!IsWindowVisible(primary.GetHandle()), "primary must be hidden");
+    {
+      TestWindow secondary;
+      Check(RunWindowsApplication(secondary, title) == EXIT_SUCCESS,
+            "relaunch must recover a hidden main window");
+      Check(secondary.initialization_count == 0,
+            "hidden recovery must not start another engine");
+      Check(IsWindowVisible(primary.GetHandle()), "hidden primary must be shown");
+    }
     ShowWindow(primary.GetHandle(), SW_MAXIMIZE);
     {
       TestWindow secondary;

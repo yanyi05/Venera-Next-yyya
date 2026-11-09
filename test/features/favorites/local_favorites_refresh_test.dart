@@ -153,6 +153,28 @@ void main() {
   App.dataPath = Directory.systemTemp.path;
   App.cachePath = Directory.systemTemp.path;
 
+  testWidgets(
+    'reading-status exclusions are explained without bypassing the filter',
+    (tester) async {
+      final fixture = await _prepare(tester, 1);
+      appdata.implicitData['local_favorites_read_filter'] = 'Completed';
+      await tester.pumpWidget(fixture.host());
+      await _settle(tester);
+      expect(_tile('seed-0'), findsNothing);
+      expect(
+        find.text('Hidden by reading-status filter: 1 comics'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pumpAndSettle();
+      expect(_tile('seed-0'), findsOneWidget);
+      expect(
+        find.text('Hidden by reading-status filter: 1 comics'),
+        findsNothing,
+      );
+    },
+  );
+
   for (final count in [0, 499, 500]) {
     for (final query in ['', 'New']) {
       for (final covered in [false, true]) {

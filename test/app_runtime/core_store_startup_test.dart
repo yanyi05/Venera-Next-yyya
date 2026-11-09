@@ -13,6 +13,7 @@ void main() {
     final events = <String>[];
     final databases = <String, Database>{};
     final failure = StateError('favorites schema');
+    final reported = <Object>[];
     CoreStoreStartup store(
       String name, {
       bool fails = false,
@@ -35,10 +36,11 @@ void main() {
       store('history'),
       store('favorites', fails: true),
       store('local', waits: true),
-    ]);
+    ], onFailure: (error, stack) => reported.add(error));
     final observed = expectLater(result, throwsA(same(failure)));
     await pumpEventQueue();
     expect(events, ['open history', 'open favorites']);
+    expect(reported, [same(failure)]);
     expect(
       databases['history']!
           .select('SELECT count(*) FROM records')
@@ -49,6 +51,7 @@ void main() {
     );
     ready.complete();
     await observed;
+    expect(reported, [same(failure)]);
     expect(events, [
       'open history',
       'open favorites',
@@ -61,6 +64,39 @@ void main() {
       expect(() => db.select('SELECT 1'), throwsStateError);
     }
   });
+
+  test(
+    'reports only the first failure even when its reporter throws',
+    () async {
+      var reports = 0;
+      var closes = 0;
+      final first = StateError('first store');
+      await expectLater(
+        initializeCoreStores(
+          [
+            (
+              name: 'first',
+              initialize: () async => throw first,
+              close: () => closes++,
+            ),
+            (
+              name: 'second',
+              initialize: () async => throw StateError('second store'),
+              close: () => closes++,
+            ),
+          ],
+          onFailure: (error, stack) {
+            reports++;
+            expect(error, same(first));
+            throw StateError('reporter');
+          },
+        ),
+        throwsA(same(first)),
+      );
+      expect(reports, 1);
+      expect(closes, 2);
+    },
+  );
 
   test(
     'synchronous failure still joins and cleans every attempted store',

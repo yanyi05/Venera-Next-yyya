@@ -4,7 +4,12 @@ import re
 import sys
 from pathlib import Path
 
-from release_version import ReleaseVersionError, check_release_files
+from release_version import (
+    ReleaseVersionError,
+    check_release_files,
+    load_release_config,
+    release_tag,
+)
 
 
 def fail(message: str) -> None:
@@ -85,11 +90,31 @@ def validate_windows_installer_metadata() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tag", default=os.environ.get("GITHUB_REF_NAME", ""))
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--tag")
+    mode.add_argument(
+        "--build-only",
+        action="store_true",
+        help="validate configured metadata for a non-release branch build",
+    )
     parser.add_argument("--write-notes")
     args = parser.parse_args()
 
-    tag = args.tag.strip()
+    if args.build_only:
+        if args.write_notes:
+            parser.error("--write-notes requires a release tag, not --build-only")
+        if os.environ.get("GITHUB_REF_TYPE") == "tag" or os.environ.get(
+            "GITHUB_REF", ""
+        ).startswith("refs/tags/"):
+            fail("Tag builds must validate the release tag without --build-only")
+        try:
+            tag = release_tag(load_release_config())
+        except ReleaseVersionError as error:
+            fail(str(error))
+    else:
+        tag = (
+            args.tag if args.tag is not None else os.environ.get("GITHUB_REF_NAME", "")
+        ).strip()
     if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-rc\.\d+)?", tag):
         fail(f"Release tag must look like v1.2.3 or v1.2.3-rc.1, got {tag!r}")
 
@@ -101,7 +126,8 @@ def main() -> None:
     if args.write_notes:
         Path(args.write_notes).write_text(notes + "\n", encoding="utf-8")
 
-    print(f"Release metadata for {tag} is valid")
+    kind = "Build" if args.build_only else "Release"
+    print(f"{kind} metadata for {tag} is valid")
 
 
 if __name__ == "__main__":

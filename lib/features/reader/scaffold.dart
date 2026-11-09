@@ -1,5 +1,11 @@
+import 'image_text.dart';
+import 'crop_settings_dialog.dart';
+import 'reader_image_tools.dart';
+import 'package:venera_next/foundation/image_crop.dart';
 import 'dart:async';
 import 'package:venera_next/components/settings_save_state.dart';
+import 'package:venera_next/components/tv_navigation.dart';
+import 'tv_input.dart';
 
 import 'package:venera_next/features/reader/status_info.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +36,7 @@ import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/features/reader/image_export.dart';
 import 'package:venera_next/features/reader/image_export_binding.dart';
 import 'package:venera_next/foundation/image_work.dart';
+import 'package:venera_next/foundation/reader_diagnostics.dart';
 import 'package:venera_next/features/reader/settings_effects.dart';
 import 'package:venera_next/features/reader/settings_panel.dart';
 import 'package:venera_next/features/reader/image_selection.dart';
@@ -61,11 +68,15 @@ class ReaderScaffold extends StatefulWidget {
     required this.createFavoriteQuery,
     required this.createImageFavorite,
     required this.createImageExport,
-    required this.revalidateImage,
+    this.revalidateImage,
+    this.onImageToolsChanged,
     required this.createSettings,
     required this.createChapterComments,
     required this.chapterNavigation,
     required this.child,
+    this.onDiagnostics,
+    this.onRemoteKey,
+    this.onCancelRemoteKeys,
   });
 
   final ReaderShellData data;
@@ -84,11 +95,15 @@ class ReaderScaffold extends StatefulWidget {
   final ReaderImageFavoriteQuery? Function() createFavoriteQuery;
   final ReaderImageFavoriteRequest? Function() createImageFavorite;
   final ReaderImageExportRequest? Function() createImageExport;
-  final Future<void> Function(ReaderImageAddress address) revalidateImage;
+  final Future<void> Function(ReaderImageAddress address)? revalidateImage;
+  final VoidCallback? onImageToolsChanged;
   final ReaderSettingsRequest? Function() createSettings;
   final ReaderChapterCommentsRequest? Function() createChapterComments;
   final ReaderChapterNavigationAction? chapterNavigation;
   final Widget child;
+  final VoidCallback? onDiagnostics;
+  final ValueChanged<KeyEvent>? onRemoteKey;
+  final VoidCallback? onCancelRemoteKeys;
 
   @override
   State<ReaderScaffold> createState() => ReaderScaffoldState();
@@ -129,6 +144,11 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
   @override
   void initState() {
     super.initState();
+    unawaited(
+      ReaderImageText.available().then((value) {
+        if (mounted) setState(() => _imageTextAvailable = value);
+      }),
+    );
     _brightnessPreview.addListener(update);
     widget.favoriteChanges.addListener(_imageFavoritesChanged);
   }
@@ -229,65 +249,76 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
         .map((size) => scaler.scale(size) / size)
         .fold(1.0, (largest, scale) => scale > largest ? scale : largest);
     final topBarHeight = kTopBarHeight * titleScale;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: AbsorbPointer(
-            absorbing: widget.data.animating,
-            child: widget.child,
-          ),
-        ),
-        if (!isOnChapterCommentsPage)
+    return TvReaderInput(
+      menuOpen: _isOpen,
+      contentInteractive: isOnChapterCommentsPage,
+      onToggleMenu: openOrClose,
+      onReadKey: widget.onRemoteKey ?? (_) {},
+      onCancelReadKeys: widget.onCancelRemoteKeys ?? () {},
+      onExit: widget.onExit,
+      child: Stack(
+        children: [
           Positioned.fill(
-            child: ReaderBrightnessOverlay(
-              enabled:
-                  _brightnessPreview.enabled ??
-                  widget.data.preferences.readerBrightnessEnabled,
-              brightness:
-                  _brightnessPreview.brightness ??
-                  widget.data.preferences.readerBrightness,
+            child: AbsorbPointer(
+              absorbing: widget.data.animating,
+              child: ExcludeFocus(
+                excluding: _isOpen && TvNavigation.enabledOf(context),
+                child: widget.child,
+              ),
             ),
           ),
-        if (!isOnChapterCommentsPage) _buildInformation(),
-        ReaderChapterNavigationButton(action: widget.chapterNavigation),
-        AnimatedPositioned(
-          duration: menuDuration,
-          top: _isOpen ? 0 : -(topBarHeight + context.padding.top),
-          left: 0,
-          right: 0,
-          // Insets change immediately when the native/custom frame changes.
-          // Keep content height in sync; animate only its entrance position.
-          child: SizedBox(
-            height: topBarHeight + context.padding.top,
-            child: _menuRegion(visible: _isOpen, child: buildTop()),
+          if (!isOnChapterCommentsPage)
+            Positioned.fill(
+              child: ReaderBrightnessOverlay(
+                enabled:
+                    _brightnessPreview.enabled ??
+                    widget.data.preferences.readerBrightnessEnabled,
+                brightness:
+                    _brightnessPreview.brightness ??
+                    widget.data.preferences.readerBrightness,
+              ),
+            ),
+          if (!isOnChapterCommentsPage) _buildInformation(),
+          ReaderChapterNavigationButton(action: widget.chapterNavigation),
+          AnimatedPositioned(
+            duration: menuDuration,
+            top: _isOpen ? 0 : -(topBarHeight + context.padding.top),
+            left: 0,
+            right: 0,
+            // Insets change immediately when the native/custom frame changes.
+            // Keep content height in sync; animate only its entrance position.
+            child: SizedBox(
+              height: topBarHeight + context.padding.top,
+              child: _menuRegion(visible: _isOpen, child: buildTop()),
+            ),
           ),
-        ),
-        AnimatedPositioned(
-          duration: menuDuration,
-          bottom: _isOpen
-              ? 0
-              : -(ReaderBottomBar.height +
-                    MediaQuery.of(context).padding.bottom),
-          left: 0,
-          right: 0,
-          child: _menuRegion(visible: _isOpen, child: buildBottom()),
-        ),
-        AnimatedPositioned(
-          duration: menuDuration,
-          curve: Curves.easeOut,
-          right: 16 + context.padding.right,
-          bottom: brightnessPanelVisible
-              ? ReaderBottomBar.height + context.padding.bottom + 12
-              : -context.height,
-          child: _menuRegion(
-            visible: brightnessPanelVisible,
-            child: buildBrightnessPanel(),
+          AnimatedPositioned(
+            duration: menuDuration,
+            bottom: _isOpen
+                ? 0
+                : -(ReaderBottomBar.height +
+                      MediaQuery.of(context).padding.bottom),
+            left: 0,
+            right: 0,
+            child: _menuRegion(visible: _isOpen, child: buildBottom()),
           ),
-        ),
-        Positioned.fill(
-          child: EInkRefreshOverlay(controller: _eInkRefreshController),
-        ),
-      ],
+          AnimatedPositioned(
+            duration: menuDuration,
+            curve: Curves.easeOut,
+            right: 16 + context.padding.right,
+            bottom: brightnessPanelVisible
+                ? ReaderBottomBar.height + context.padding.bottom + 12
+                : -context.height,
+            child: _menuRegion(
+              visible: brightnessPanelVisible,
+              child: buildBrightnessPanel(),
+            ),
+          ),
+          Positioned.fill(
+            child: EInkRefreshOverlay(controller: _eInkRefreshController),
+          ),
+        ],
+      ),
     );
   }
 
@@ -305,6 +336,26 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     chapterTitle: widget.data.chapterTitle,
     onBack: () => unawaited(widget.onExit()),
     actions: [
+      if (widget.onDiagnostics != null && widget.imageWork.diagnostics != null)
+        ListenableBuilder(
+          listenable: widget.imageWork.diagnostics!,
+          builder: (context, _) => Tooltip(
+            message: widget.imageWork.diagnostics!.isRecording
+                ? 'Stop and review'.tl
+                : 'Reading diagnostics'.tl,
+            child: IconButton(
+              icon: Icon(
+                widget.imageWork.diagnostics!.isRecording
+                    ? Icons.stop_circle_outlined
+                    : Icons.speed,
+              ),
+              onPressed: () {
+                if (_isOpen) openOrClose();
+                widget.onDiagnostics!();
+              },
+            ),
+          ),
+        ),
       if (shouldShowChapterComments())
         Tooltip(
           message: "Chapter Comments".tl,
@@ -387,8 +438,12 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     if (!mounted || address == null) return;
     try {
       final bytes = await readReaderImageBytes(address);
-      if (!mounted || bytes == null) {
-        showToast(message: 'Image is not available in cache'.tl, context: context);
+      if (!mounted) return;
+      if (bytes == null) {
+        showToast(
+          message: 'Image is not available in cache'.tl,
+          context: context,
+        );
         return;
       }
       final result = await showDialog<ReaderImageMaskEdit>(
@@ -400,12 +455,9 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
         ),
       );
       if (!mounted || result == null) return;
-      await ReaderImageMasks.write(
-        address,
-        result.rectangles,
-        result.color,
-      );
+      await ReaderImageMasks.write(address, result.rectangles, result.color);
       if (mounted) {
+        widget.onImageToolsChanged?.call();
         showToast(message: 'Image mask saved'.tl, context: context, seconds: 1);
       }
     } catch (error, stack) {
@@ -414,17 +466,74 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     }
   }
 
+  Future<void> editCrop() async {
+    final result = await showDialog<ReaderCrop>(
+      context: context,
+      builder: (_) => ReaderCropDialog(
+        initial: ReaderImageTools.crop(
+          widget.data.comicId,
+          widget.data.sourceKey,
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    try {
+      await ReaderImageTools.saveCrop(
+        widget.data.comicId,
+        widget.data.sourceKey,
+        result,
+      );
+      if (mounted) widget.onImageToolsChanged?.call();
+    } catch (error) {
+      if (mounted) showToast(message: '裁剪设置保存失败：$error', context: context);
+    }
+  }
+
+  bool _imageTextAvailable = false;
+  bool _readingText = false;
+  Future<void> openImageText() async {
+    if (_readingText) return;
+    final address = await _pickImageAddress();
+    if (!mounted || address == null) return;
+    final task = widget.imageWork.start();
+    if (task == null) return;
+    setState(() => _readingText = true);
+    try {
+      final bytes = await task.read(() => readReaderImageBytes(address));
+      if (bytes == null) throw StateError('图片尚未加载，请加载后重试。');
+      task.check();
+      await ReaderImageText.open(bytes);
+    } catch (error) {
+      if (mounted && !task.isCancelled) {
+        showToast(message: '文字识别不可用：$error', context: context);
+      }
+    } finally {
+      task.finish();
+      if (mounted) setState(() => _readingText = false);
+    }
+  }
+
+  bool _refreshingImage = false;
   Future<void> revalidateCurrentImage() async {
+    if (_refreshingImage) return;
     final address = await _pickImageAddress();
     if (!mounted || address == null) return;
     try {
-      await widget.revalidateImage(address);
+      setState(() => _refreshingImage = true);
+      showToast(message: '正在刷新图片…', context: context, seconds: 1);
+      await widget.revalidateImage!(address);
       if (mounted) {
-        showToast(message: 'Image reloaded from source'.tl, context: context, seconds: 1);
+        showToast(
+          message: 'Image reloaded from source'.tl,
+          context: context,
+          seconds: 1,
+        );
       }
     } catch (error, stack) {
       Log.error('Reader image reload', error, stack);
       if (mounted) showToast(message: error.toString(), context: context);
+    } finally {
+      if (mounted) setState(() => _refreshingImage = false);
     }
   }
 
@@ -486,8 +595,12 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
       onChapters: widget.data.hasChapters ? openChapterDrawer : null,
       onSave: saveCurrentImage,
       onShare: share,
+      onCropImage: editCrop,
+      onImageText: _imageTextAvailable && !_readingText ? openImageText : null,
       onEditImageMask: editImageMask,
-      onRevalidateImage: revalidateCurrentImage,
+      onRevalidateImage: _refreshingImage || widget.revalidateImage == null
+          ? null
+          : revalidateCurrentImage,
     );
 
     return ReaderBottomBar(
@@ -587,6 +700,7 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
   void share() => unawaited(_imageExporter.export(sharing: true));
 
   void openSetting() {
+    widget.imageWork.diagnostics?.stop(ReaderDiagnosticStop.interrupted);
     final request = widget.createSettings();
     if (request == null || !request.isCurrent()) return;
     final work = widget.imageWork;

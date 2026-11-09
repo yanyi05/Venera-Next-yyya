@@ -18,6 +18,50 @@ import 'package:venera_next/network/request_scope.dart';
 void main() {
   final binding = _FrameGateBinding();
 
+  for (final compact in [false, true]) {
+    testWidgets(
+      'chapter title exists before previous prefetch and does not shift the first image: compact=$compact',
+      (tester) async {
+        final fixture = _Fixture(
+          chapter: 2,
+          size: compact ? const Size(375, 667) : const Size(800, 600),
+          textScale: compact ? 2.0 : 1.0,
+        );
+        tester.view.physicalSize = fixture.size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final previous = Completer<List<String>>();
+        fixture.load = (_, _) => previous.future;
+        try {
+          await tester.pumpWidget(fixture.build());
+          expect(find.text('Continue to Title 2'), findsOneWidget);
+          await fixture.waitForImages(tester);
+          expect(fixture.loads, [1]);
+          expect(find.text('Continue to Title 2'), findsOneWidget);
+          Finder firstImage() => find.byWidgetPredicate((widget) {
+            if (widget is! ComicImage ||
+                widget.image is! ReaderDisplayImageProvider) {
+              return false;
+            }
+            final image = (widget.image as ReaderDisplayImageProvider).image;
+            return image.eid == 'id-2' && image.page == 1;
+          });
+          final before = tester.getRect(firstImage());
+          previous.complete(List.filled(3, fixture.imageKey));
+          await fixture.waitForImages(tester);
+          expect(find.text('Continue to Title 2'), findsOneWidget);
+          expect(tester.getRect(firstImage()).top, closeTo(before.top, 0.01));
+          expect(fixture.navigation.state.chapter, 2);
+          expect(tester.takeException(), isNull);
+        } finally {
+          if (!previous.isCompleted) previous.complete([fixture.imageKey]);
+          await fixture.dispose(tester);
+        }
+      },
+    );
+  }
+
   testWidgets(
     'waterfall hit preserves the displayed chapter and duplicate source index',
     (tester) async {
@@ -312,7 +356,12 @@ class _FrameGateBinding extends AutomatedTestWidgetsFlutterBinding {
 }
 
 class _Fixture {
-  _Fixture({int chapter = 1, this.shortPages = false}) {
+  _Fixture({
+    int chapter = 1,
+    this.shortPages = false,
+    this.size = const Size(800, 600),
+    this.textScale = 1.0,
+  }) {
     navigation =
         ReaderController(
             pageCount: () => 3,
@@ -329,6 +378,8 @@ class _Fixture {
 
   final directory = Directory.systemTemp.createTempSync('continuous-owner-');
   final bool shortPages;
+  final Size size;
+  final double textScale;
   var comicId = 'book';
   final reads = <ReaderImageAddress>[];
   late final File file = File('${directory.path}/page.png')
@@ -353,46 +404,58 @@ class _Fixture {
   }
 
   Widget build() => MaterialApp(
-    home: ReaderContinuousView(
-      imageWork: imageWork,
-      data: ReaderContinuousData(
-        vertical: true,
-        reverse: false,
-        crossChapter: true,
-        firstChapter: true,
-        lastChapter: false,
-        maxChapter: 2,
-        preloadCount: 0,
-        splitWideImages: false,
-        invertSplit: false,
-        scrollSpeed: 1,
-        limitImageWidth: false,
-        sideMargin: 0,
-        doubleTapCollect: false,
-        centerLongPressZoom: true,
-        sourceKey: null,
-        comicId: comicId,
+    theme: ThemeData(
+      brightness: textScale > 1 ? Brightness.dark : Brightness.light,
+    ),
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.linear(textScale),
+        disableAnimations: true,
       ),
-      navigation: navigation,
-      loadChapter: (chapter, scope) {
-        loads.add(chapter);
-        return load?.call(chapter, scope) ?? Future.value([imageKey]);
-      },
-      chapterId: (chapter) => 'id-$chapter',
-      chapterTitle: (chapter) => 'Title $chapter',
-      onViewportChanged: viewport.update,
-      onUpdate: () {},
-      onFloatingButton: (_) {},
-      onCollectImage: () {},
-      onActiveChapterChanged: () {},
-      onContentLoading: _loadingCallback(),
-      onPreviousError: (error, _) => fail('$error'),
-      onNavigationError: (_, error, _) => fail('$error'),
-      readerSize: () => const Size(800, 600),
-      readImage: (image) {
-        reads.add(image);
-        return file.readAsBytes();
-      },
+      child: child!,
+    ),
+    home: Material(
+      child: ReaderContinuousView(
+        imageWork: imageWork,
+        data: ReaderContinuousData(
+          vertical: true,
+          reverse: false,
+          crossChapter: true,
+          firstChapter: true,
+          lastChapter: false,
+          maxChapter: 2,
+          preloadCount: 0,
+          splitWideImages: false,
+          invertSplit: false,
+          scrollSpeed: 1,
+          limitImageWidth: false,
+          sideMargin: 0,
+          doubleTapCollect: false,
+          centerLongPressZoom: true,
+          sourceKey: null,
+          comicId: comicId,
+        ),
+        navigation: navigation,
+        loadChapter: (chapter, scope) {
+          loads.add(chapter);
+          return load?.call(chapter, scope) ?? Future.value([imageKey]);
+        },
+        chapterId: (chapter) => 'id-$chapter',
+        chapterTitle: (chapter) => 'Title $chapter',
+        onViewportChanged: viewport.update,
+        onUpdate: () {},
+        onFloatingButton: (_) {},
+        onCollectImage: () {},
+        onActiveChapterChanged: () {},
+        onContentLoading: _loadingCallback(),
+        onPreviousError: (error, _) => fail('$error'),
+        onNavigationError: (_, error, _) => fail('$error'),
+        readerSize: () => size,
+        readImage: (image) {
+          reads.add(image);
+          return file.readAsBytes();
+        },
+      ),
     ),
   );
 

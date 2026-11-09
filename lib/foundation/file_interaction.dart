@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:flutter/services.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
-import 'package:flutter_saf/flutter_saf.dart';
+import 'package:venera_saf/venera_saf.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/file_system.dart';
 import 'package:share_plus/share_plus.dart' as s;
@@ -15,6 +15,7 @@ import 'platform_dialog_queue.dart';
 import 'share_file_operation.dart';
 import 'file_selection.dart';
 import 'directory_selection.dart';
+import 'harmonyos.dart';
 export 'directory_selection.dart';
 export 'file_selection.dart';
 
@@ -61,6 +62,9 @@ class DirectoryPicker {
 
   Future<DirectorySelection?> pickDirectory({
     bool directAccess = false,
+    // OHOS import copies cannot become persistent storage locations.
+    bool copyForImport = false,
+    void Function(int processed, int total)? onCopyProgress,
     void Function()? checkStop,
   }) async {
     checkStop?.call();
@@ -68,6 +72,18 @@ class DirectoryPicker {
     try {
       return await _directoryDialogs.run(() async {
         checkStop?.call();
+        if (App.isHarmonyOS) {
+          if (copyForImport) {
+            return HarmonyOS.selectDirectory(
+              cachePath: App.cachePath,
+              onCopyProgress: onCopyProgress,
+            );
+          }
+          throw UnsupportedError(
+            'Persistent external directories are not supported in this HarmonyOS experiment. '
+            'Use directory copy import or select archive files instead.',
+          );
+        }
         if (App.isAndroid) {
           final directory = await AndroidDirectory.pickDirectory();
           if (directory == null) return null;
@@ -125,7 +141,14 @@ Future<FileSelection?> selectFile({
         extensions: extensions,
       );
       FileSelection? file;
-      if (App.isAndroid) {
+      if (App.isHarmonyOS) {
+        final files = await HarmonyOS.selectFiles(
+          extensions: ext,
+          cachePath: App.cachePath,
+        );
+        if (files.isEmpty) return null;
+        file = files.single;
+      } else if (App.isAndroid) {
         const selectFileChannel = MethodChannel("venera/select_file");
         String mimeType = "*/*";
         if (ext.length == 1) {
@@ -173,6 +196,13 @@ Future<List<FileSelection>> selectFiles({
   try {
     return await _fileDialogs.run(() async {
       checkStop?.call();
+      if (App.isHarmonyOS) {
+        return HarmonyOS.selectFiles(
+          extensions: ext,
+          cachePath: App.cachePath,
+          multiple: true,
+        );
+      }
       if (App.isAndroid) {
         final mimeType = ext.length == 1
             ? FileType.fromExtension(ext.single).mime
@@ -239,6 +269,7 @@ Future<bool> saveFile({
         return _mobileFileSaves.run(() async {
           operation.checkActive();
           checkStop?.call();
+          if (App.isHarmonyOS) return HarmonyOS.saveFile(source);
           final result = await FlutterFileDialog.saveFile(
             params: SaveFileDialogParams(sourceFilePath: source.path),
           );
@@ -257,24 +288,7 @@ Future<bool> saveFile({
   );
 }
 
-final class _IOOverrides extends IOOverrides {
-  final _parentZone = Zone.current;
-
-  // Only file/directory construction is overridden for SAF. Preserve native
-  // type queries through the parent zone: Dart 3.11's default IOOverrides
-  // adapter can report existing Windows paths as notFound.
-  @override
-  Future<FileSystemEntityType> fseGetType(String path, bool followLinks) =>
-      _parentZone.run(
-        () => FileSystemEntity.type(path, followLinks: followLinks),
-      );
-
-  @override
-  FileSystemEntityType fseGetTypeSync(String path, bool followLinks) =>
-      _parentZone.run(
-        () => FileSystemEntity.typeSync(path, followLinks: followLinks),
-      );
-
+final class _IOOverrides extends SafIOOverrides {
   @override
   Directory createDirectory(String path) {
     if (App.isAndroid) {
@@ -324,6 +338,11 @@ class Share {
     if (App.isLinux) {
       throw UnsupportedError('File sharing is unavailable on Linux');
     }
+    if (App.isHarmonyOS) {
+      throw UnsupportedError(
+        'HarmonyOS system sharing is not integrated. Save the file and share it from Files.',
+      );
+    }
     Rect? actualOrigin;
     await withShareFileSource(
       data: data,
@@ -353,6 +372,11 @@ class Share {
     bool Function()? canShare,
   }) => _dialogs.run(() async {
     if (canShare?.call() == false) return;
+    if (App.isHarmonyOS) {
+      throw UnsupportedError(
+        'HarmonyOS system sharing is not integrated. Copy the text instead.',
+      );
+    }
     await s.SharePlus.instance.share(
       s.ShareParams(
         text: text,

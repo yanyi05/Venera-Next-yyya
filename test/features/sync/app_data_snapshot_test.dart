@@ -28,6 +28,8 @@ void main() {
           'quickFavorite',
           'disableSyncFields',
           'language',
+          'windowsWindowHotkey',
+          'tvLowMemoryMode',
         ])
           key: appdata.settings[key],
       };
@@ -62,6 +64,11 @@ void main() {
           ),
         );
         appdata.settings['language'] = 'zh-CN';
+        appdata.settings['windowsWindowHotkey'] = {
+          'enabled': true,
+          'hotkey': {'modifiers': 3, 'keyCode': 72},
+        };
+        appdata.settings['tvLowMemoryMode'] = false;
         appdata.settings['disableSyncFields'] = 'language';
         final pending = await SourceTransactionJournal.begin(
           dataPath: App.dataPath,
@@ -93,6 +100,8 @@ void main() {
           isFalse,
         );
         expect(_settings(complete)['language'], 'zh-CN');
+        expect(_settings(complete).containsKey('windowsWindowHotkey'), isFalse);
+        expect(_settings(complete).containsKey('tvLowMemoryMode'), isFalse);
         expect(
           utf8.decode(complete.findFile('comic_source/example.js')!.content),
           '// source',
@@ -126,6 +135,8 @@ void main() {
           (await exportAppData()).readAsBytesSync(),
         );
         expect(_settings(filtered).containsKey('language'), isFalse);
+        expect(_settings(filtered).containsKey('windowsWindowHotkey'), isFalse);
+        expect(_settings(filtered).containsKey('tvLowMemoryMode'), isFalse);
         // A prior filtered syncdata.json must not leak into a now-unfiltered export.
         appdata.settings['disableSyncFields'] = '';
         appdata.settings['language'] = 'en-US';

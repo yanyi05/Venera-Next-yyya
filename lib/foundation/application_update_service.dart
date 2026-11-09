@@ -1,3 +1,4 @@
+import 'application_distribution.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -13,11 +14,17 @@ class ApplicationUpdateService {
   ApplicationUpdateService({
     required Dio Function() createClient,
     required String Function() currentVersion,
+    this.repository = ApplicationDistribution.repository,
+    this.forAndroidTv = false,
+    this.forHarmonyOS = false,
   }) : _createClient = createClient,
        _currentVersion = currentVersion;
 
   final Dio Function() _createClient;
   final String Function() _currentVersion;
+  final String repository;
+  final bool forAndroidTv;
+  final bool forHarmonyOS;
   final _pending = <RequestScope, Future<void>>{};
   final _cleanupFailures = <ApplicationUpdateCleanupFailure>[];
   bool _closed = false;
@@ -55,18 +62,23 @@ class ApplicationUpdateService {
       final includePrerelease = allowsPrereleaseUpdates(version);
       final response = await dio.get<Object?>(
         includePrerelease
-            ? 'https://api.github.com/repos/CyrilPeng/venera-next/releases?per_page=20'
-            : 'https://api.github.com/repos/CyrilPeng/venera-next/releases/latest',
+            ? 'https://api.github.com/repos/$repository/releases?per_page=20'
+            : 'https://api.github.com/repos/$repository/releases/latest',
         cancelToken: scope.cancelToken,
-        options: Options(headers: {'Accept': 'application/vnd.github+json'}),
+        options: Options(
+          headers: {'Accept': 'application/vnd.github+json'},
+          validateStatus: (status) => status == 200 || status == 404,
+        ),
       );
       scope.check();
-      if (response.statusCode != 200) {
+      if (response.statusCode != 200 && response.statusCode != 404) {
         throw FormatException(
           'Unexpected release status: ${response.statusCode}',
         );
       }
-      final data = response.data is String
+      final data = response.statusCode == 404
+          ? const []
+          : response.data is String
           ? jsonDecode(response.data as String)
           : response.data;
       if (data is! Map && data is! List) {
@@ -81,7 +93,11 @@ class ApplicationUpdateService {
         }
       }
       final latest = selectPublishedReleaseVersion(
-        data,
+        forHarmonyOS
+            ? releases.where(_hasHarmonyPackage).toList()
+            : forAndroidTv
+            ? releases.where(_hasTvPackage).toList()
+            : data,
         includePrerelease: includePrerelease,
       );
       available = latest != null && shouldNotifyRelease(latest, version)
@@ -123,6 +139,41 @@ class ApplicationUpdateService {
     }
     scope.check();
     return available;
+  }
+
+  static bool _hasTvPackage(Object? release) {
+    if (release is! Map || release['assets'] is! List) return false;
+    final version = (release['tag_name'] as String).replaceFirst(
+      RegExp(r'^[vV]'),
+      '',
+    );
+    // Updates open the release page, never download a guessed mobile APK.
+    // Require the universal TV package so the offered release is installable.
+    return (release['assets'] as List).whereType<Map>().any(
+      (asset) =>
+          asset['name'] == 'VeneraNext-$version-android-tv.apk' &&
+          asset['state'] == 'uploaded' &&
+          asset['size'] is num &&
+          (asset['size'] as num) > 0,
+    );
+  }
+
+  static bool _hasHarmonyPackage(Object? release) {
+    if (release is! Map || release['assets'] is! List) return false;
+    final version = (release['tag_name'] as String).replaceFirst(
+      RegExp(r'^[vV]'),
+      '',
+    );
+    final uploaded = (release['assets'] as List).whereType<Map>().where(
+      (asset) =>
+          asset['state'] == 'uploaded' &&
+          asset['size'] is num &&
+          (asset['size'] as num) > 0,
+    );
+    return [
+      'VeneraNext-$version-harmonyos-arm64-unsigned.hap',
+      'harmonyos-manifest.json',
+    ].every((name) => uploaded.any((asset) => asset['name'] == name));
   }
 
   Future<void> closeAndWait() {

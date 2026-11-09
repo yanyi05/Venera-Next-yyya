@@ -12,6 +12,99 @@ Comic _comic(String title, {List<String>? tags}) =>
     Comic(title, '', title, null, tags, '', 'webdav_library', null, null);
 
 void main() {
+  testWidgets(
+    'duplicate source entries retain distinct hero identities after refresh',
+    (tester) async {
+      final comic = _comic('Duplicate');
+      Widget build() => MaterialApp(
+        home: Scaffold(
+          body: CustomScrollView(
+            slivers: [
+              SliverGridComics(comics: [comic, comic]),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(build());
+      final before = tester
+          .widgetList<ComicTile>(find.byType(ComicTile))
+          .map((tile) => tile.heroID)
+          .toList();
+      expect(before.toSet(), hasLength(2));
+      await tester.pumpWidget(build());
+      final after = tester
+          .widgetList<ComicTile>(find.byType(ComicTile))
+          .map((tile) => tile.heroID)
+          .toList();
+      expect(after, before);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final favorites in [false, true]) {
+    testWidgets(
+      'keyword changes refresh mounted grids and keep hero identities: favorites=$favorites',
+      (tester) async {
+        final settings = Map<String, dynamic>.from(
+          appdata.toJson()['settings'] as Map,
+        );
+        final changes = ChangeNotifier();
+        configureComicWidgets(
+          addStateListener: changes.addListener,
+          removeStateListener: changes.removeListener,
+        );
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox());
+          configureComicWidgets();
+          changes.dispose();
+          settings.forEach((key, value) => appdata.settings[key] = value);
+        });
+        appdata.settings['language'] = 'en-US';
+        appdata.settings['blockedWords'] = <String>['Hidden'];
+        final comics = [_comic('Visible'), _comic('Hidden')];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: CustomScrollView(
+                slivers: [
+                  SliverGridComics(
+                    comics: comics,
+                    showHiddenCount: true,
+                    useFavoriteDisplaySettings: favorites,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final visibleHero = tester
+            .widget<ComicTile>(find.byType(ComicTile))
+            .heroID;
+        expect(
+          find.text('Hidden by keyword filters: 1 comics'),
+          findsOneWidget,
+        );
+        appdata.settings['blockedWords'] = <String>[];
+        await tester.pumpAndSettle();
+        expect(find.byType(ComicTile), findsNWidgets(2));
+        expect(
+          tester.widget<ComicTile>(find.byType(ComicTile).first).heroID,
+          visibleHero,
+        );
+        expect(find.text('Hidden by keyword filters: 1 comics'), findsNothing);
+        appdata.settings['blockedWords'] = <String>['Hidden'];
+        changes.notifyListeners();
+        await tester.pumpAndSettle();
+        appdata.settings['blockedWords'] = <String>[];
+        changes.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(find.byType(ComicTile), findsNWidgets(2));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   setUp(() {
     final previous = {
       for (final key in [

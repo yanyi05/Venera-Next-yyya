@@ -1,7 +1,461 @@
-# Patch release readiness
+# Release readiness
 
-This checklist tracks the release preparation following v1.18.0. It does not
-authorize publishing a tag or mark unresolved issue reports as fixed.
+This checklist tracks release preparation following v1.18.0. A release does
+not mark unresolved reports as fixed. Dated verification records and the
+original device acceptance checklist remain below. The newest dated section
+defines the current release scope; older candidate sections are historical.
+
+## Stable release preparation (2026-11-08)
+
+The maintainer authorized publishing `v1.18.3`, build **249**, and testing the
+complete platform release chain. Freeze runtime and dependency changes at
+consolidated main `1b3fd753a592e3679cc8086430b3269c971aaaec`; its Git tree is
+identical to the independently accepted RC3 source. This preparation changes
+version metadata, changelog and release documentation in one Chinese
+conventional commit. Do not introduce another candidate or move existing tags.
+
+- RC3 published all 26 assets, passed the full platform/quality/native gates,
+  and completed an independent Android data-preserving upgrade, existing comic
+  reading, CB7 import and cold-restart reading check. The consolidated main's
+  dependency, full quality and HarmonyOS checks also passed. Those results are
+  the accepted baseline; run the exact stable commit's required checks too.
+- Synchronize `release.json`, bundled `pubspec.yaml` and the stable changelog.
+  Check the tag, Android mobile/TV identities, canonical signing certificates,
+  increasing version codes and every platform's embedded version. Rebuild from
+  the stable tag; do not relabel RC assets. Preserve backups and original comics
+  during installation checks and retain existing signing identities.
+- Require full quality, dependency/native checks, Android mobile/TV, Windows,
+  macOS, iOS, Linux x64/ARM64 and the same-commit HarmonyOS workflow. Publish only
+  after every required job succeeds. Verify a non-prerelease/latest public
+  release and all 26 asset names, sizes, states and SHA-256 digests, including
+  the unsigned HAP, manifest, checksum and both installation guides.
+- HarmonyOS remains unsigned ARM64/API-26 Beta with `signed: false` and
+  `runtime_verified: false`. The distribution switch applies to stable tags
+  too. No HarmonyOS device is attached; retained-key signing, on-device reading,
+  real-data upgrade and signing renewal remain follow-up acceptance. Never
+  omit the five HarmonyOS assets or infer device acceptance from host checks.
+- Update and review AltStore against the actual public IPA metadata, and
+  validate/submit Winget against the public Windows installer. Distinguish
+  submission from Microsoft approval and public-source availability. Keep
+  release preparation and generated distribution metadata commits clear.
+- #143/#129 retain original-device feedback requirements; #115 is still
+  investigating. #123's deeper hierarchy and #152/#81/#139 enhancements remain
+  future work. Newly reported #155 affects the separate folder/comic sorting
+  entry points in both v1.18.2 and RC3; the sorting code is unchanged and no
+  startup, data-loss or upgrade failure is established. Document the existing
+  sidebar folder-sort path and follow up without treating it as fixed.
+- Post at most one version-specific notice for newly delivered issue behavior
+  after public asset verification. Reuse prior diagnostics and keep reports
+  open pending their own acceptance. A short RC observation window or absent
+  replies do not establish long-term, original-device acceptance.
+
+## Required HarmonyOS candidate release (2026-11-07)
+
+The maintainer explicitly requires HarmonyOS in every subsequent package
+release. Prepare `v1.18.3-rc.3`, build 248, from unified `main`; standard
+platforms and the unsigned HarmonyOS beta must identify the same commit.
+The earlier build-244 and two-development-branch sections below are historical.
+
+- Enable the committed schema-3 distribution switch after source/build review.
+  This authorizes unsigned beta distribution, not device acceptance. Check the
+  switch in the tag metadata gate; keep previews and untagged assets ineligible
+  for publication. Never publish a partial release that omits HarmonyOS.
+- Every candidate and stable tag rebuilds Android mobile/TV, Windows, macOS,
+  iOS, Linux x64/ARM64 and the real API-26 ARM64 HAP. Keep official Flutter and
+  the root lock separate from the pinned Flutter OH SDK and controlled overlays.
+  Preserve all quality, native, license and dependency gates.
+- Keep the publishing checkouts in sibling `release-source/` and
+  `harmonyos-source/` directories, with notes and outputs outside both Git
+  trees. RC1 completed its builds but publication rejected generated untracked
+  inputs; retain that tag and Actions record. RC2 corrected the workspace layout
+  and passed every build, but the published-only tag endpoint could not read its
+  draft. Retain the RC2 tag and evidence; RC3 corrects draft lookup and rebuilds.
+- Resolve drafts through the authenticated, fully paginated release list with
+  unique exact-tag matching, then fetch by numeric release ID. Reject changed
+  IDs, tags or states, and continue size/digest verification before publication.
+  Use the public tag endpoint after publishing. Explicitly target the source SHA
+  when creating the release. Do not publish earlier failed candidates manually.
+- Require 26 public assets: 19 standard-platform packages, the unsigned HAP,
+  two Android provenance manifests and four HarmonyOS companions. Verify the
+  HAP, manifest, checksum and both guides before upload, through the draft API,
+  and again after publication. Check the actual source/version/run, embedded
+  assets, all seven managed native libraries, APK signatures and increasing
+  version codes. A missing or mismatched HarmonyOS asset stops the release.
+- Keep `signed: false`, `runtime_verified: false` and HarmonyOS beta labeling.
+  No HarmonyOS device is attached during this preparation. Publish the reviewed
+  unsigned beta for daily-use testing; signing identity, on-device reading and
+  data-preserving upgrades remain explicit follow-up acceptance. Do not claim
+  that compilation or synthetic host tests established those results.
+- The RC keeps the existing stable update channel, AltStore source and Winget
+  distribution unchanged. Build fresh from the tag; never relabel the earlier
+  244/245 preview artifacts or move published historical tags.
+- Follow up once after publication on #143, #129 and #123 with the exact RC
+  link and checks for newly delivered behavior. Keep #115 investigating and
+  ask only for new-version results that are still missing. #125, #126 and #133
+  are now closed; #77 remains closed. The other open requests are #152, #81
+  and #139, which stay outside this release's runtime scope.
+- Recheck preserved-data installation and the changed storage/codecs/reader
+  paths using the released packages. Reporter confirmation governs the original
+  device symptoms; silence and a successful build do not resolve those reports.
+  Prepare the stable release after the candidate's acceptance, then continue
+  the remaining enhancements. Stable releases retain all five HarmonyOS assets.
+
+## Stable patch preparation (2026-11-03)
+
+Prepare v1.18.3, build 244, after the maintainer accepted the next-step plan.
+Include #143's repeat-create menu lifecycle and case-only folder rename fixes,
+the existing favorite-ID, ZIP compatibility and #129 fixes, and the first
+unsigned HarmonyOS beta distribution. The #125 A/B/A probe is development
+evidence only; production preloading and cache limits remain unchanged.
+
+- Keep the source fixes, probe and release metadata as separate conventional
+  commits with matching changelog entries, then merge the shared main baseline
+  into HarmonyOS and pin the reviewed resulting source. Keep only main and
+  HarmonyOS as long-lived branches and retain both existing worktrees.
+- Verify the exact candidate with strict analysis, architecture/import and Git
+  dependency checks, favorites/navigation/data regressions, reader lifecycle
+  tests, release-script tests, and the normal full platform/HAP workflows.
+- Branch workflow dispatch builds reviewable 1.18.3+244 installation artifacts
+  without creating a tag or public Release. The packaging inventory remains
+  the 26 assets described below; preserve Android mobile/TV identity, signing
+  certificates and increasing version codes.
+- Complete Android/Windows data-preserving upgrade checks and HarmonyOS
+  retained-key signing, install/upgrade and basic reading acceptance before
+  tagging. No Android or HarmonyOS target was attached during preparation;
+  CI compilation and unsigned-package audits do not substitute for that check.
+- Preserve #125's unresolved first-view scope and #129/#143 original-device
+  verification boundaries in the candidate notes. Keep #115/#126 open for
+  concrete new evidence. Leave #77 closed without tracking or notifications.
+
+## HarmonyOS release integration (2026-11-03)
+
+The next release adds an unsigned ARM64 HarmonyOS beta HAP and four companions:
+a source manifest, SHA-256 sums and Chinese/English installation guides. The
+expected public inventory becomes 20 installation assets plus 6 companion
+manifests, checksums and guides, for 26 assets total. Existing platform assets
+and Android signing requirements remain part of acceptance.
+
+- Keep main and HarmonyOS separate. Pin the exact reviewed HarmonyOS commit
+  and a shared main baseline; block a release when runtime, dependency, asset
+  or test changes on main have not been synced and validated on HarmonyOS.
+- Require strict source analysis and host regressions, a real API 26 HAP,
+  ARM64 native-library and embedded-source audits, all five HarmonyOS assets,
+  and uploaded draft asset sizes/digests before publishing.
+- Use the caller's version, build and changelog. The first tagged HAP build
+  must be at least 244; branch CI can validate the current 1.18.2+243 without
+  publishing. This integration does not bump versions, create tags or a
+  Release, or backfill previously published releases.
+- The package is unsigned and requires self-signing with a retained key for
+  upgrades. Packaging checks do not establish on-device runtime acceptance.
+  Issue #77 is closed; leave it closed without tracking or notifications.
+
+## Stable release preparation (2026-11-01)
+
+The maintainer approved v1.18.2, build 243, rather than extending the RC series
+while waiting for every reporter. Freeze runtime changes at integrated main
+9b5a30482d250e51c7f08c3b6378b3af019f4071. Release preparation changes metadata
+and documentation only. Include the earlier RC fixes, two-level favorites,
+Android TV, QuickJS buffer handling, Windows WebView2 proxy routing and Tokio
+1.54.1. HarmonyOS stays separate. Keep historical tags and releases unchanged.
+
+### Acceptance gates
+
+- Run the exact release commit's metadata, script, strict analysis, full
+  Flutter, TV flavor, native and dependency checks. Earlier PR results are
+  useful evidence, not a substitute for these checks.
+- Recheck old favorites migration before wider distribution: preserve direct
+  contents, order, network links, timestamps and follow-update preferences;
+  keep the independent pre-migration SQLite snapshot; roll back failures;
+  reopen the database; round-trip complete backups and WebDAV snapshots; reject
+  malformed or unknown modern schemas before replacing live data.
+- Migration occurs on initialization, not only after using child folders.
+  Back up application data separately and retain original comics. Devices
+  sharing sync data should upgrade together; do not alternate old and new
+  writers. Downgrade recovery uses the pre-upgrade backup, not a promise of
+  backward-compatible live data. No data reset is part of acceptance.
+- Build fresh release packages on the tag for Android mobile and TV, Windows,
+  macOS, iOS, Linux x64 and Linux ARM64. Windows release CI must pass its
+  isolated installation/startup checks. Android checks must preserve the
+  published signing certificate, package IDs and monotonically increasing
+  version codes, including upgrades from the TV Alpha line.
+- Publish only after all required jobs pass. Expected public inventory is
+  19 installation assets (8 APK, 2 Windows, 1 DMG, 1 IPA, 2 DEB, 2 RPM,
+  2 AppImage, 1 Arch package) plus 2 Android provenance/SHA-256 manifests.
+  Verify the annotated tag target, non-prerelease/latest status, asset names,
+  sizes, digests and matching release notes. Do not relabel RC artifacts.
+- Update AltStore only from the actual public IPA metadata and review its
+  automation PR. Validate and submit the stable Winget manifest; distinguish
+  submission from Microsoft approval and public-source availability. Remove
+  merged temporary branches, keeping main and HarmonyOS as long-lived branches.
+
+### Feedback and known boundaries
+
+#125 has a confirmed application-side buffer handling fix, but its remaining
+first-view pause with processing disabled is unresolved. The completed
+first-view/revisit comparison must not be requested again. Do not infer a
+network-only or device-only cause from report volume. #128 is an application
+Windows proxy bug, not a comic-source defect; original-device site login is
+still outstanding. #110/#115, #126 and #129 keep their own unresolved scope.
+#111 is closed after the reporter confirmed normal startup on v1.18.1.
+
+After publication, send one version-specific notice to the newly delivered
+feature/fix issues and retain their open state pending verification. For the
+first week, triage reproducible startup failures, data loss or widespread
+crashes as hotfix/distribution-stop candidates; track limited performance
+reports separately. Collect version/build, flavor, device/OS, reader mode,
+local/remote content type and minimal steps, with existing opt-in diagnostics
+only when needed. Do not enable automatic telemetry, request private backups,
+repeat completed comparisons or treat silence as acceptance. No scheduled
+monitor is created by this release procedure.
+
+## Sixth patch candidate preparation (2026-10-30)
+
+The next candidate is v1.18.2-rc.6, build 242, after rc.5 did not publish due
+to the Apple runner's missing Rustup wrapper directory. The CI fix creates
+`~/.cargo/bin`, exposes the wrapper through the subsequent steps' PATH and
+preserves the original rustup binary, cargo/rustc proxy links and install lock.
+The source includes regression checks for absent directories and existing
+hard-linked proxies; POSIX cases require cloud execution, not Windows mocks.
+Keep the failed rc.5 tag unchanged and rebuild every platform on the new tag.
+
+This candidate first delivers #107's new-task default policy, non-blocking
+missing-page queue and incomplete local reading/retry, plus #125's bounded
+manual diagnostics. It does not claim a new Android stutter fix, mobile power
+benefit or acceptance of the new download workflow. Earlier RC fixes remain
+included. Stable distribution stays at v1.18.1; no experimental branch or
+stable distribution metadata is changed.
+
+Retest #107 only for the new policy, subsequent queue progression, original
+page positions/placeholders, missing-only retry and paused restart recovery.
+Its background/skip acceptance on earlier releases is already recorded.
+For #125, use the reporter's existing local images and unchanged settings,
+capture separate reading modes, then preview/copy the report before exiting.
+Do not request private attachments, repeat supplied device details, equate
+asynchronous waits with CPU/UI blocking, or interpret frame samples as FPS.
+
+Validate the exact release commit's metadata, local script/diagnostic/changelog
+regressions and cloud quality/security checks before tagging. The tag workflow
+must pass fresh full quality gates and all six platform builds before
+publication. Verify all 15 uploaded installation assets, package versions,
+release notes, prerelease flag and unchanged stable channel before posting
+one version-specific notice to each of #107 and #125. Keep both issues open.
+Back up separately, preserve original comics and use the pre-upgrade backup
+for rollback; do not require data resets, task deletion or full re-downloads.
+
+## Fifth patch candidate preparation (2026-10-30)
+
+The tag build did not publish a release: both Apple builds failed while
+installing the Rustup wrapper because Homebrew-backed runners did not have
+`~/.cargo/bin`. Main and tag quality/dependency checks passed, but that is not
+a successful six-platform release. Keep this tag at its original commit,
+record the CI fix and prepare a later candidate with fresh builds. Do not
+notify reporters to install rc.5 or move the tag to another commit. The
+following paragraphs retain the failed candidate's planned scope.
+
+The next candidate is v1.18.2-rc.5, build 241. It first delivers #107's
+default-off policy for new image tasks, non-blocking waiting-for-missing-pages
+state, and explicit incomplete local reading/retry flow. It also delivers
+#125's opt-in, bounded 45-second reading diagnostics. The diagnostic tool is
+not a new stutter fix; the original Android report remains unresolved. Earlier
+RC changes remain included. Stable distribution stays at v1.18.1; do not update
+AltStore or Winget, merge experimental branches, or close these issues.
+
+- #107: the reporter accepted background downloads on v1.18.1+236 and per-task
+  skipping on v1.18.2-rc.1+237. Retest only the new default policy, queue advance,
+  local missing-page placeholders/original page numbers, explicit missing-only
+  retry and paused restart recovery. Existing checkpoints/pages need not be
+  deleted; manually start an old incomplete task once after upgrading.
+- #125: use the same already-downloaded local pages, then capture first browse
+  and quick revisits in separate reading modes with unchanged settings. Review
+  and explicitly copy the in-memory report before leaving the reader. Do not
+  request private comics, full backups, credentials or private log attachments,
+  or repeat the device/format information already supplied. Asynchronous waits
+  are not CPU/UI blocking measurements, and frame samples are not whole-run FPS.
+- #115/#126 and earlier fixes retain their own outstanding device acceptance.
+  No new SAF recovery or mobile power-use result is claimed. Favorites hierarchy,
+  Android TV, HarmonyOS, a general AVIF decoder and split-CBZ export remain out
+  of scope for this candidate.
+
+The two runtime commits passed full cloud quality and dependency checks at
+729c9cc3784cd0dc69458fedabc2489d77e290e6; its Android release build also passed.
+These results do not replace the exact release metadata commit's checks or
+original-device acceptance. Before tagging, validate synchronized metadata,
+script tests and changelog/diagnostic regressions, then confirm the exact
+commit's quality and dependency runs. The tag workflow must pass metadata,
+full quality gates and fresh six-platform builds before publishing all assets.
+Verify the annotated tag target, notes, prerelease flag, complete uploaded
+asset inventory and unchanged stable channel before posting one version-specific
+notice to #107 and #125. Do not publish empty releases or relabel old artifacts.
+
+Back up application data separately before upgrading and preserve original
+comic files. No data reset, task deletion or complete re-download is required.
+Use the pre-upgrade backup when rolling back; do not promise old versions can
+read data modified by the new incomplete-page flow.
+
+## Second patch candidate preparation (2026-10-28)
+
+The next candidate is v1.18.2-rc.2, build 238. It retains rc.1 and first
+delivers the #110 local-All selection restoration and #117 Windows global
+hide/restore hotkey. Stable distribution stays at v1.18.1; do not update
+AltStore or Winget. The hierarchy, Android TV and HarmonyOS branches are not
+merged into this release.
+
+- #110: test local All and a concrete folder after ending the Android process
+  and restarting. Deleted folders must still be rejected. This fix does not
+  establish that every original missing-favorites report has been resolved.
+- #117: test the default-off shortcut from another application and across
+  normal, maximized, fullscreen and minimized states. Verify key-repeat,
+  conflicts, saving, restart, disable/clear, native dialogs and relaunch recovery.
+  The binding is device-local and only hides the main window; it is not a
+  privacy feature and does not pause downloads.
+- #125: requested the actual version/build and installation origin because the
+  report names rc2 before an official rc.2 exists. Image format, device and the
+  difference between delayed image arrival and UI stalls remain unconfirmed.
+  The new synthetic local-reader decode probe passed all 20 measurements with
+  Flutter 3.41.4 on Windows. It is not an Android frame-pacing test, a decoded
+  image-cache test, or a runtime fix. See the
+  [diagnostic record](../experiments/webdav_reader_performance.zh.md).
+- #107/#115 still need original-environment confirmation; do not repeat the
+  existing retest notices early. #111 has a reporter response that v1.18.1
+  starts normally; keep the agreed observation window without a no-response
+  reminder. Already-closed #96/#100/#112/#118/#119 remain closed. The #100
+  closure followed the reporter's request to defer unstable-site follow-up,
+  not acceptance of an expanded page/body HTTP/3 strategy.
+
+Local preparation passed 168 targeted favorites, hotkey, synchronization,
+image-provider, WebDAV and changelog tests, the decode probe's 20 measurements,
+strict analysis and architecture/import checks with Flutter 3.41.4. All 139
+Python script tests completed with four intentional skips. These are scoped
+host checks, not a new full-suite result or Android device acceptance.
+
+The runtime commits already passed full cloud quality and dependency checks
+at e634d887e14a7c3daaa5fbb2bc439ce5115d9192. These older results do not replace
+the exact release commit's checks. Before tagging, confirm its metadata and
+dependency audit. The tag workflow must pass full quality gates and fresh
+six-platform builds before publishing all installation assets. Verify the tag,
+release notes, prerelease flag, asset inventory and unchanged stable channel
+before notifying #110 and #117 once with version-specific retest steps.
+
+Back up before upgrading; no data reset or archive renaming is required. Keep
+the original comics and pre-upgrade application-data export for rollback.
+The host measurements do not establish #91 energy savings or #125 device
+performance, and publishing a candidate does not close these reports.
+
+## Next patch candidate preparation (2026-10-25)
+
+The next candidate is v1.18.2-rc.1, build 237, based on the released
+v1.18.1. It delivers the follow-ups previously marked unreleased in #98,
+#107, #110, #112 and #115, plus PR #113. The dated v1.18.1 sections below
+describe that older release's scope, not this candidate's new functionality.
+Stable distribution remains v1.18.1; do not update AltStore or Winget for RC1.
+
+- #98: continuous and waterfall modes resume automatic scrolling after zoom
+  gestures end, retain screen-space speed and read the zoomed chapter tail
+  before stopping or crossing chapters. Touch holds, menus and background
+  pauses remain; zoomed paginated galleries still pause automatic page turns.
+- #107: an opt-in task option continues past unavailable network images after
+  bounded retries. Missing pages remain visible in the queue, never count as
+  a complete download, persist across restarts and are retried on next start.
+  Authentication, certificate, cancellation and local-write errors still stop.
+  The Honor/MagicOS background-disconnection report needs separate device tests.
+- #110/#115: mounted lists refresh when keyword blocks change and preserve card
+  identities; hidden counts distinguish filtering from missing data. Original
+  favorites/import symptoms still need reporter confirmation. Do not bypass
+  filters, rename archives automatically, clear data or request private backups.
+- #112: waterfall chapter titles are present on first layout, preventing an
+  earlier chapter's prefetch from inserting a title and shifting current images.
+  Retest entry at a later chapter, slow loading and exit while loading.
+- #113: wheel and trackpad handlers cover the whole viewport, including blank
+  side margins, without duplicate handling. Preserve the contributor's original
+  commit; the changelog uses the PR number without an extra attribution section.
+
+The actual merged source passed 30 targeted reader regressions and strict
+analysis with pinned Flutter 3.41.4. Release preparation also passed 18
+changelog/update-channel tests and 139 Python script tests (four skips).
+Merged-main commit b73fadf passed [full cloud quality checks](https://github.com/CyrilPeng/Venera-Next/actions/runs/40203793185)
+and the [Rust dependency audit](https://github.com/CyrilPeng/Venera-Next/actions/runs/40203793067).
+These results do not replace device acceptance or fresh checks on the release
+commit. Publish only after the exact release commit passes metadata checks,
+full quality gates, dependency audit and fresh six-platform builds. Do not publish an empty
+release, relabel older assets or treat an in-progress job as a passing result.
+
+After all assets are public and verified, post one version-specific test notice
+to the five related open issues and the merged PR, with their own reproduction
+steps. Keep issues open pending verification; do not repeat unrelated stable
+release notices. No destructive reset is required. Preserve original comic
+files and a pre-upgrade application-data export; use that backup for rollback.
+The Android startup, real SAF recovery and mobile energy-use limitations from
+v1.18.1 are not claimed newly resolved by this candidate.
+
+## Stable patch release decision (2026-10-25)
+
+The maintainer approved releasing v1.18.1, build 236, with the documented
+limitations rather than waiting indefinitely for original-reporter feedback.
+There has been no new RC feedback at this decision point. Silence is not
+device acceptance, and the original device checklist is not claimed complete.
+
+This promotion changes release metadata and documentation only; runtime code,
+dependencies and fixes are unchanged from v1.18.1-rc.1. The stable tag must
+pass metadata validation, strict analysis, the full test suite, dependency
+audit and fresh builds for all six platforms on its exact commit. Earlier
+RC artifacts are not renamed or reused as stable installation packages.
+
+The release notes retain the unresolved Android startup report in #111, the
+original missing-import symptom in #115, Android SAF permission/recovery
+acceptance in #119, and iPad/Android visual acceptance in #118. Favorites
+visibility in #110, OEM background downloads in #107, the original HTTP/3
+network in #100 and mobile energy consumption in #91 also remain unconfirmed.
+The additional zoom interaction in #98 and title layout in #112 are not
+claimed implemented. No destructive data reset is part of acceptance.
+
+After the stable assets are published, notify the relevant reporters with
+issue-specific reproduction steps and request feedback within 14 days. Send
+one reminder after seven days. Reassess each issue at the deadline rather
+than closing all inactive reports automatically: confirmed code fixes can be
+closed as released, unresolved startup/data reports remain open or explicitly
+awaiting information, and unfinished extra requests must retain their own
+tracking. Preserve the existing closed state of #106 and #121.
+
+Stable distribution metadata is updated only after the GitHub Release is
+published: verify the generated Winget manifest and review the AltStore source
+update against the actual IPA asset, size and release date.
+
+## First patch candidate (2026-10-24)
+
+The requested candidate is v1.18.1-rc.1, build 235. Its release notes retain all
+changes since v1.18.0 and explicitly distinguish confirmed code fixes from
+unresolved device symptoms. Stable distribution stays at v1.18.0: neither the
+AltStore source nor Winget metadata changes for this candidate.
+
+- #111: the Windows legacy-favorites SQLite internal-table failure is fixed.
+  A separate reproduced failure now shows diagnostics before pending source
+  initialization and rollback finish, without releasing data ownership early.
+  The original Android splash hang remains unconfirmed; upgrade and full-data
+  restore acceptance is still required.
+- #119: migration now accepts the SAF picker's android:// document paths while
+  preserving journal, overlap and recovery checks. Native/SAF and SAF/SAF
+  regressions pass; real Android provider permissions and recovery need testing.
+- #115: all-failed archive batches no longer report success, and named errors
+  are visible. The reporter's actual archive imports and reads on this Windows
+  host under both reported names. The original missing-list symptom has not
+  been reproduced; do not declare filenames invalid or bypass block filters.
+- #118: selecting an already loaded gallery page no longer remounts its image.
+  Reset retires old animations and gestures in place while actual unmount still
+  owns disposal. Local PNG, frame identity, rendered pixels, interrupted turns
+  and lifecycle regressions pass. iPad and Android visual acceptance is open.
+
+The four follow-ups passed 131, 86, 235 and 932 related tests respectively with
+the pinned Flutter 3.41.4 SDK; these counts overlap and are not a new full-suite
+result. Strict Flutter analysis passed. The version-tag workflow must still run
+metadata checks, full quality gates and all six platform builds on the exact
+release commit before it publishes a prerelease with installation assets. Do
+not publish an empty release or reuse earlier build artifacts as this candidate.
+
+Back up before upgrading. Preserve original comics and the pre-upgrade export;
+downgrading is not a schema compatibility promise. Restore the pre-upgrade
+backup when rolling back instead of deleting user data to mask a failure.
+
+The following sections retain the dated diagnostic and validation history.
 
 ## Startup report 111
 
@@ -98,9 +552,15 @@ Issues 110 and 111 have no additional reporter feedback as of this check. No
 version/build increment, release tag, or issue closure was made during local
 verification.
 
-## Release gates
+## Original stable release acceptance checklist
 
-1. Establish the root cause or an actionable environmental diagnosis for #111.
+This checklist records the original full-device acceptance target. The scoped
+release decision above permits publishing with explicit remaining limitations;
+it does not turn missing device evidence into a passing result.
+
+1. Establish the root cause or an actionable environmental diagnosis for the
+   original Android failure in #111, and finish the candidate's device checks
+   for #115, #119 and #118. Keep unresolved reports explicit.
 2. Run formatter, structure/dependency checks, Python release tests, strict Flutter
    analysis, and the full Flutter suite on the final source state.
 3. Build Android and Windows release artifacts locally where supported. Run the
@@ -114,3 +574,82 @@ verification.
 5. Only after acceptance, update version/build metadata and versioned release
    notes, then validate with .github/scripts/validate_release.py for the intended
    tag. Keep unresolved OEM-specific limitations explicit in the release notes.
+
+## Reader issue fixes (2026-10-22)
+
+- #98 is reproduced with the real gallery and production PhotoView. The
+  contained scale changes on rotation while the old cached initial scale does
+  not. Deriving the baseline from current layout boundaries restores automatic
+  page turns without treating a user's zoom as the unzoomed baseline. Tests use
+  physical view metrics, not only a changed test render surface, and cover all
+  gallery directions, paired pages and rotation during animation.
+- #112 has a reproduced cancellation path: Network.get throws the HTTP bridge's
+  stringified Dio cancellation, which previously entered the session's failure
+  drain as an ordinary source error. Only exact aliases recorded by a cancelled
+  request and its ancestry are restored to the original cancellation reason.
+  Accepted Promises still drain before exit; unrelated source rejections and
+  persistence/native cleanup errors are not suppressed. Chapter loads and
+  retained image callbacks both have native QuickJS regressions.
+- #111 is not reproduced by the synthetic legacy-settings startup test. That
+  test preserves reader mode, search history and an existing database while a
+  source's initialization Promise remains pending. It does not establish that
+  the reporter's import, settings, filesystem permissions or Android device are
+  compatible. Keep the primary diagnostic/device acceptance gate open.
+
+These changes are unreleased. Original Android rotation/loading-exit steps and
+upgrade/import still require device acceptance; do not close the issues solely
+because the host regressions pass. The additional title-layout feedback in #112
+is not claimed as resolved by the cancellation patch.
+
+Verification completed on 2026-10-23:
+
+- Full Windows-host Flutter suite: 5,333 passed, two conditional skips, zero
+  failures using Flutter 3.41.6 / Dart 3.11.4 with serial execution. The log
+  wrapper's initial parse error is not counted as a test result; its fresh,
+  complete rerun passed. No assertions or timeouts were weakened.
+- An isolated checkout of the repository's Flutter 3.41.4 / Dart 3.11.1 passed
+  enforced offline lockfile resolution, strict analysis, changed-file formatting,
+  53 targeted regressions and all 12 actual-reader rotation cases. The original
+  PhotoView baseline fails the actual-reader rotation regression.
+- Structure imports, architecture dependencies, release metadata, pinned Git
+  dependencies and git diff --check passed. Python tests ran 127 cases with four
+  skips and no failures; the isolated code-audit self-check and analysis passed.
+- Windows x64 Release built with Flutter 3.41.4. Android ARM64 Release compiled,
+  packaged and passed APK signature verification. Maven TLS download failures
+  were resolved with a build-only init script and local proxy; repository Gradle
+  files and dependency versions remain unchanged. The universal-named local APK
+  has ARM64 AOT only; it is a test artifact, not a multi-ABI release candidate.
+
+Evidence is in ignored build/issue-fixes-20261022 logs and artifact hashes. No
+Android device was connected; iOS, macOS and Linux builds were not run locally.
+Verification leaves version/build metadata at 1.18.0+234 and does not publish a
+release tag or close an issue. Use the complete Windows Release directory, not
+only its EXE.
+
+## CI follow-up (2026-10-23)
+
+The first CI runs for reader-fix commit 3b53f5e exposed two independent issues:
+
+- Dependency audit run 39874391057 reported RUSTSEC-2026-0382 in
+  rustls-webpki 0.103.15 and RUSTSEC-2026-0381 in webpki-roots 1.0.4.
+  The lockfile now selects the fixed 0.103.16 and 1.0.10 releases. Other
+  dependencies, including rustls, Flutter Rust Bridge and the iOS libc pin,
+  remain unchanged; no advisory exclusions or audit relaxations are added.
+- Complete-build run 39874394216 was manually dispatched on main, but the
+  metadata job treated main as a release tag and failed before quality/build
+  jobs could run. Branch dispatch now explicitly validates the configured
+  release version with --build-only, retaining version/changelog, bridge-lock
+  and installer checks. Tag builds still validate the actual ref, and the
+  release job remains limited to version-tag pushes. Build-only mode cannot
+  write release notes or bypass tag validation for a tag build.
+
+Local follow-up verification: 139 Python tests ran with four conditional skips
+and no failures, including 12 new release-validation regressions. All four
+locked Rust library/callback-drain tests passed. Both branch-build and explicit
+v1.18.0 metadata validation, structure/dependency checks, actionlint and
+git diff --check passed. Cargo-audit 0.22.2 scanned all 243 locked crates against
+1,349 current advisories with --deny unsound and no findings. Fresh cloud audit,
+quality and six-platform complete
+build results must be checked against the amended commit, not the superseded
+run or the separate successful build-only run 39874710216. No release tag or
+version/build increment is introduced by this CI repair.

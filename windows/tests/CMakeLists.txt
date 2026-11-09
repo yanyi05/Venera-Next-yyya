@@ -41,3 +41,14 @@ target_compile_options(windows_heartbeat_tests PRIVATE /W4 /WX /EHsc)
 target_include_directories(windows_heartbeat_tests PRIVATE "${RUNNER_DIR}")
 add_test(NAME windows_heartbeat COMMAND windows_heartbeat_tests)
 set_tests_properties(windows_heartbeat PROPERTIES TIMEOUT 15)
+
+add_executable(windows_hotkey_tests
+  window_hotkey_test.cpp
+  "${RUNNER_DIR}/window_hotkey.cpp"
+)
+target_compile_features(windows_hotkey_tests PRIVATE cxx_std_17)
+target_compile_definitions(windows_hotkey_tests PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(windows_hotkey_tests PRIVATE /W4 /WX /wd4100 /EHsc)
+target_include_directories(windows_hotkey_tests PRIVATE "${RUNNER_DIR}")
+add_test(NAME windows_hotkey COMMAND windows_hotkey_tests)
+set_tests_properties(windows_hotkey PROPERTIES TIMEOUT 15)

@@ -1,3 +1,5 @@
+import 'package:share_plus/share_plus.dart';
+import 'package:venera_next/foundation/startup_journal.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -25,9 +27,12 @@ class StartupFailureApp extends StatefulWidget {
 class _StartupFailureAppState extends State<StartupFailureApp> {
   bool _copied = false;
   bool _copyFailed = false;
+  bool _recoveryScheduled = false;
 
   String get _diagnostic => redactLogText(
-    'VeneraNext ${App.version} (${Platform.operatingSystem})\n'
+    'VeneraNext ${App.buildVersion} (${Platform.operatingSystem})\n'
+    '阶段：${StartupJournal.current?.phase ?? 'environment'}\n'
+    '上次启动：${StartupJournal.current?.previousPhase ?? 'unknown'}\n'
     '${widget.error}\n${widget.stack}',
   );
 
@@ -103,6 +108,43 @@ class _StartupFailureAppState extends State<StartupFailureApp> {
                   ),
                 ),
                 if (_copyFailed) Text('Failed to copy diagnostic details'.tl),
+                Builder(
+                  builder: (buttonContext) => TextButton.icon(
+                    icon: const Icon(Icons.share),
+                    label: const Text('分享诊断记录'),
+                    onPressed: () async {
+                      final box =
+                          buttonContext.findRenderObject() as RenderBox?;
+                      try {
+                        await SharePlus.instance.share(
+                          ShareParams(
+                            text: _diagnostic,
+                            sharePositionOrigin: box == null
+                                ? null
+                                : box.localToGlobal(Offset.zero) & box.size,
+                          ),
+                        );
+                      } catch (_) {
+                        await _copy();
+                      }
+                    },
+                  ),
+                ),
+                if (StartupJournal.current != null)
+                  TextButton.icon(
+                    icon: const Icon(Icons.health_and_safety),
+                    label: const Text('下次启动停用已安装漫画源'),
+                    onPressed: () {
+                      try {
+                        StartupJournal.current!.setSafeMode(true);
+                        setState(() => _recoveryScheduled = true);
+                      } catch (_) {
+                        _copy();
+                      }
+                    },
+                  ),
+                if (_recoveryScheduled)
+                  const Text('已设置。请完全关闭并重新打开应用；漫画源文件与收藏会保留。'),
                 const SizedBox(height: 8),
                 Text(
                   'Review personal information before sharing diagnostic details.'

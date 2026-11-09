@@ -1,3 +1,5 @@
+import 'resource_budget.dart';
+import 'reader_image_tools.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -13,7 +15,6 @@ import 'package:venera_next/features/reader/image_downloads.dart';
 import 'package:venera_next/foundation/image_work.dart';
 import 'package:venera_next/features/reader/image_position.dart';
 import 'package:venera_next/features/reader/comic_image.dart';
-import 'package:venera_next/features/reader/reader_image_masks.dart';
 import 'package:venera_next/features/reader/auto_reading.dart';
 import 'package:venera_next/features/reader/waterfall_flow.dart';
 import 'package:venera_next/foundation/context.dart';
@@ -23,6 +24,7 @@ import 'package:venera_next/foundation/widget_utils.dart';
 import 'package:venera_next/features/reader/waterfall_controller.dart';
 
 import 'continuous_data.dart';
+import 'continuous_scroll.dart';
 import 'current_image.dart';
 import 'display_image_provider.dart';
 import 'reader_controller.dart';
@@ -102,7 +104,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
   var photoViewController = PhotoViewController();
   StreamSubscription<PhotoViewControllerValue>? _photoPositionSubscription;
   bool _positionUpdateScheduled = false;
-  ScrollController? _scrollController;
+  ContinuousScrollController? _scrollController;
   bool _disposed = false;
   Timer? _initialCacheTimer;
   Timer? _scrollActivityTimer;
@@ -359,6 +361,14 @@ class ContinuousModeState extends State<ReaderContinuousView>
 
   @override
   void initState() {
+    _scrollController = ContinuousScrollController(
+      itemPositionsListener.itemPositions,
+      onPositionChanged: () {
+        _smoothPosition = null;
+        _smoothGeneration++;
+        _futurePosition = null;
+      },
+    )..addListener(onScroll);
     widget.onViewportChanged(this, true);
     _initSegments();
     itemPositionsListener.itemPositions.addListener(onPositionChanged);
@@ -376,6 +386,14 @@ class ContinuousModeState extends State<ReaderContinuousView>
   @override
   void didUpdateWidget(covariant ReaderContinuousView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.data.preloadCount > 0 && data.preloadCount == 0) {
+      unawaited(_imageDownloads.dispose());
+      _imageDownloads = ReaderImageDownloads(work: widget.imageWork);
+      cached = List.filled(maxPage + 2, false);
+      for (final segment in _waterfallFlow.segments) {
+        segment.cached.clear();
+      }
+    }
     if (!identical(oldWidget.imageWork, widget.imageWork) ||
         !identical(oldWidget.navigation, widget.navigation) ||
         oldWidget.data.comicId != data.comicId ||
@@ -405,6 +423,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
     _initialCacheTimer?.cancel();
     _scrollActivityTimer?.cancel();
     _scrollController?.removeListener(onScroll);
+    _scrollController?.dispose();
     _scrollController = null;
     widget.onViewportChanged(this, false);
     // A parent content reload may already have marked its replacement loading.
@@ -499,6 +518,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
 
   void onPositionChanged() {
     if (_disposed || !mounted) return;
+    _scrollController?.syncPosition();
     final viewport = context.findRenderObject();
     if (viewport is! RenderBox || !viewport.attached || !viewport.hasSize) {
       return;
@@ -569,7 +589,6 @@ class ContinuousModeState extends State<ReaderContinuousView>
         !mounted ||
         controller == null ||
         !controller.hasClients ||
-        isZoomedIn ||
         isLongPressing ||
         fingers > 0 ||
         _isRestoringPrependedSegmentPosition ||
@@ -605,6 +624,11 @@ class ContinuousModeState extends State<ReaderContinuousView>
       return AutoReadingStep.waiting;
     }
     final position = scrollController.position;
+    final scale = (photoViewController.scale ?? 1.0).clamp(1.0, 2.5);
+    final pan = photoViewController.position;
+    final direction = data.reverse ? -1.0 : 1.0;
+    final panAlongAxis = data.vertical ? pan.dy : pan.dx;
+    final zoomOverflow = position.viewportDimension * (scale - 1) / 2;
     final lastIndex = crossChapter && !acrossChapters
         ? _waterfallIndexOfChapterPage(currentChapter, maxPage)!
         : _flowImageCount;
@@ -612,12 +636,16 @@ class ContinuousModeState extends State<ReaderContinuousView>
         .where((item) => item.index == lastIndex)
         .firstOrNull;
     var available = position.maxScrollExtent - position.pixels;
+    double? remaining;
     if (last != null) {
-      available = math.min(
-        available,
-        math.max(0.0, (last.itemTrailingEdge - 1) * position.viewportDimension),
-      );
-      if (last.itemTrailingEdge <= 1.001) {
+      // Item positions are unscaled. Include the clipped zoomed tail and pan
+      // before deciding that the chapter has reached the physical viewport end.
+      remaining =
+          (last.itemTrailingEdge - 1) * position.viewportDimension * scale +
+          zoomOverflow +
+          direction * panAlongAxis;
+      available = math.min(available, math.max(0.0, remaining / scale));
+      if (remaining <= 0.5) {
         if (crossChapter &&
             acrossChapters &&
             _waterfallFlow.lastChapter! < data.maxChapter) {
@@ -645,9 +673,24 @@ class ContinuousModeState extends State<ReaderContinuousView>
         return AutoReadingStep.finished;
       }
     }
-    if (available <= 0) return AutoReadingStep.waiting;
+    if (available <= 0) {
+      final tail = math.min(
+        remaining ?? 0.0,
+        zoomOverflow + direction * panAlongAxis,
+      );
+      if (tail <= 0.5) return AutoReadingStep.waiting;
+      final shift = math.min(distance, tail) * direction;
+      photoViewController.updateMultiple(
+        position: data.vertical
+            ? pan.translate(0, -shift)
+            : pan.translate(-shift, 0),
+      );
+      return AutoReadingStep.advanced;
+    }
     _futurePosition = null;
-    scrollController.jumpTo(position.pixels + math.min(distance, available));
+    scrollController.jumpTo(
+      position.pixels + math.min(distance / scale, available),
+    );
     return AutoReadingStep.advanced;
   }
 
@@ -734,9 +777,14 @@ class ContinuousModeState extends State<ReaderContinuousView>
     );
   }
 
+  final _preloadPlan = ReaderPreloadPlan();
   void cacheImages(int current) {
     if (!mounted) return;
-    for (int i = current + 1; i <= current + preCacheCount; i++) {
+    for (final i in _preloadPlan.pages(
+      current,
+      preCacheCount,
+      crossChapter ? _flowImageCount : maxPage,
+    )) {
       if (crossChapter) {
         var imageRef = _imageRefAt(i);
         if (imageRef == null) continue;
@@ -814,9 +862,8 @@ class ContinuousModeState extends State<ReaderContinuousView>
     if (!crossChapter || !imageRef.isFirstInSegment) {
       return const SizedBox();
     }
-    var isInitialChapter =
-        imageRef.position.chapter == _waterfallFlow.firstChapter;
-    if (isInitialChapter) return const SizedBox();
+    // The first loaded segment is not stable: prefetch can prepend an earlier
+    // chapter. Always reserve its title before any image finishes decoding.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       child: Center(
@@ -884,18 +931,6 @@ class ContinuousModeState extends State<ReaderContinuousView>
       initialScrollIndex: currentPage,
       itemScrollController: itemScrollController,
       itemPositionsListener: itemPositionsListener,
-      scrollControllerCallback: (scrollController) {
-        if (_disposed || !mounted) return;
-        if (identical(_scrollController, scrollController)) return;
-        if (_scrollController != null) {
-          _scrollController!.removeListener(onScroll);
-        }
-        _scrollController = scrollController;
-        _smoothPosition = null;
-        _smoothGeneration++;
-        _futurePosition = null;
-        _scrollController!.addListener(onScroll);
-      },
       itemCount: _flowItemCount,
       addSemanticIndexes: false,
       scrollDirection: data.vertical ? Axis.vertical : Axis.horizontal,
@@ -906,73 +941,99 @@ class ContinuousModeState extends State<ReaderContinuousView>
           ? const ClampingScrollPhysics()
           : const BouncingScrollPhysics(),
       itemBuilder: (context, index) {
-        if (index == 0) {
-          return const SizedBox();
-        }
-        if (index == _flowImageCount + 1) {
-          return _buildFlowEnd(context);
-        }
-        var imageRef = _imageRefAt(index);
-        if (imageRef == null) {
-          return const SizedBox();
-        }
-        double? width, height;
-        if (!data.vertical) {
-          height = double.infinity;
-        } else {
-          width = double.infinity;
-        }
-
-        final image = ReaderImageProvider(
-          imageRef.imageKey,
-          data.sourceKey,
-          data.comicId,
-          imageRef.position.chapterId,
-          imageRef.position.imageNumber,
-          enableResize: true,
-          reloadRevision: data.imageRefreshRevision,
-        );
-
-        var comicImage = SizeChangedLayoutNotifier(
-          child: ComicImage(
-            filterQuality: FilterQuality.medium,
-            image: ReaderDisplayImageProvider(image, this.widget.imageWork),
-            width: width,
-            height: height,
-            fit: BoxFit.contain,
-            splitWideImage: _splitWideImages,
-            splitWideImageInvert: _splitWideImagesInvert,
-            showImageDimensions: data.showImageDimensions,
-            maskAddress: ReaderImageAddress(
-              imageKey: imageRef.imageKey,
-              sourceKey: data.sourceKey,
-              comicId: data.comicId,
-              chapterId: imageRef.position.chapterId,
-            ),
-            onInit: (state) => imageStates.add(state),
-            onDispose: (state) => imageStates.remove(state),
-          ),
-        );
-
-        return ColoredBox(
-          color: context.colorScheme.surface,
-          child: data.vertical
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildChapterDivider(context, imageRef),
-                    comicImage,
-                  ],
-                )
-              : comicImage,
+        return ContinuousScrollAnchor(
+          controller: _scrollController!,
+          index: index,
+          child: _buildFlowItem(context, index),
         );
       },
-      scrollBehavior: const MaterialScrollBehavior().copyWith(
+    );
+
+    widget = ScrollConfiguration(
+      behavior: const MaterialScrollBehavior().copyWith(
         scrollbars: false,
         dragDevices: _kTouchLikeDeviceTypes,
       ),
+      child: widget,
     );
 
+    return _buildReaderGestures(context, widget);
+  }
+
+  Widget _buildFlowItem(BuildContext context, int index) {
+    if (index == 0) {
+      return const SizedBox();
+    }
+    if (index == _flowImageCount + 1) {
+      return _buildFlowEnd(context);
+    }
+    var imageRef = _imageRefAt(index);
+    if (imageRef == null) {
+      return const SizedBox();
+    }
+    double? width, height;
+    if (!data.vertical) {
+      height = double.infinity;
+    } else {
+      width = double.infinity;
+    }
+
+    final image = ReaderImageProvider(
+      imageRef.imageKey,
+      data.sourceKey,
+      data.comicId,
+      imageRef.position.chapterId,
+      imageRef.position.imageNumber,
+      enableResize: true,
+      reloadRevision:
+          data.imageRevisions['${imageRef.imageKey}@${data.sourceKey}@${data.comicId}@${imageRef.position.chapterId}'] ??
+          data.imageRefreshRevision,
+      crop: ReaderImageTools.cropForImage(
+        ReaderImageAddress(
+          imageKey: imageRef.imageKey,
+          sourceKey: data.sourceKey,
+          comicId: data.comicId,
+          chapterId: imageRef.position.chapterId,
+        ),
+        data.crop,
+      ),
+      diagnostics: widget.imageWork.diagnostics,
+      decodePixelBudget: data.decodePixelBudget,
+    );
+
+    var comicImage = SizeChangedLayoutNotifier(
+      child: ComicImage(
+        filterQuality: FilterQuality.medium,
+        image: ReaderDisplayImageProvider(image, widget.imageWork),
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+        splitWideImage: _splitWideImages,
+        splitWideImageInvert: _splitWideImagesInvert,
+        showImageDimensions: data.showImageDimensions,
+        maskAddress: ReaderImageAddress(
+          imageKey: imageRef.imageKey,
+          sourceKey: data.sourceKey,
+          comicId: data.comicId,
+          chapterId: imageRef.position.chapterId,
+        ),
+        onInit: (state) => imageStates.add(state),
+        onDispose: (state) => imageStates.remove(state),
+      ),
+    );
+
+    return ColoredBox(
+      color: context.colorScheme.surface,
+      child: data.vertical
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [_buildChapterDivider(context, imageRef), comicImage],
+            )
+          : comicImage,
+    );
+  }
+
+  Widget _buildReaderGestures(BuildContext context, Widget widget) {
     widget = NotificationListener<SizeChangedLayoutNotification>(
       onNotification: (_) {
         _schedulePositionUpdate();
@@ -1028,11 +1089,6 @@ class ContinuousModeState extends State<ReaderContinuousView>
           });
         }
       },
-      onPointerPanZoomUpdate: (event) {
-        if (event.scale == 1.0) {
-          smoothTo(0 - event.panDelta.dy);
-        }
-      },
       onPointerMove: (event) {
         Offset value = event.delta;
         if (photoViewController.scale == 1 || fingers != 1) {
@@ -1057,7 +1113,6 @@ class ContinuousModeState extends State<ReaderContinuousView>
           position: photoViewController.position + offset,
         );
       },
-      onPointerSignal: onPointerSignal,
       child: widget,
     );
 
@@ -1128,15 +1183,26 @@ class ContinuousModeState extends State<ReaderContinuousView>
       width *= 1 - percent * 2 / 100;
     }
 
-    return PhotoView.customChild(
-      backgroundDecoration: BoxDecoration(color: context.colorScheme.surface),
-      childSize: Size(width, height),
-      minScale: 1.0,
-      maxScale: 2.5,
-      strictScale: true,
-      controller: photoViewController,
-      onScaleUpdate: onScaleUpdate,
-      child: SizedBox(width: width, height: height, child: widget),
+    // Keep wheel and trackpad scrolling active across the full viewport,
+    // including the blank margins around the narrowed image flow.
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerSignal: onPointerSignal,
+      onPointerPanZoomUpdate: (event) {
+        if (event.scale == 1.0) {
+          smoothTo(0 - event.panDelta.dy);
+        }
+      },
+      child: PhotoView.customChild(
+        backgroundDecoration: BoxDecoration(color: context.colorScheme.surface),
+        childSize: Size(width, height),
+        minScale: 1.0,
+        maxScale: 2.5,
+        strictScale: true,
+        controller: photoViewController,
+        onScaleUpdate: onScaleUpdate,
+        child: SizedBox(width: width, height: height, child: widget),
+      ),
     );
   }
 

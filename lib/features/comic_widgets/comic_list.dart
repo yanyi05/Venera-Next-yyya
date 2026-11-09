@@ -17,7 +17,6 @@ import 'package:venera_next/routing/app_navigation.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/res.dart';
-import 'package:venera_next/foundation/extensions.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
@@ -34,6 +33,7 @@ class SliverGridComics extends StatefulWidget {
     this.onLongPressed,
     this.selections,
     this.useFavoriteDisplaySettings = false,
+    this.showHiddenCount = false,
   });
 
   final List<Comic> comics;
@@ -51,6 +51,7 @@ class SliverGridComics extends StatefulWidget {
   final void Function(Comic, int heroID)? onLongPressed;
 
   final bool useFavoriteDisplaySettings;
+  final bool showHiddenCount;
 
   @override
   State<SliverGridComics> createState() => _SliverGridComicsState();
@@ -62,74 +63,50 @@ class _SliverGridComicsState extends State<SliverGridComics> {
 
   static int _nextHeroID = 0;
 
-  void generateHeroID() {
-    heroIDs.clear();
+  void _refreshComics() {
+    final previousIDs = <(String, String), List<int>>{};
     for (var i = 0; i < comics.length; i++) {
-      heroIDs.add(_nextHeroID++);
+      (previousIDs[(comics[i].sourceKey, comics[i].id)] ??= []).add(heroIDs[i]);
     }
+    comics = widget.comics.where((comic) => isBlocked(comic) == null).toList();
+    heroIDs = [
+      for (final comic in comics)
+        switch (previousIDs[(comic.sourceKey, comic.id)]) {
+          final ids? when ids.isNotEmpty => ids.removeAt(0),
+          _ => _nextHeroID++,
+        },
+    ];
   }
 
   @override
   void didUpdateWidget(covariant SliverGridComics oldWidget) {
-    if (oldWidget.useFavoriteDisplaySettings !=
-        widget.useFavoriteDisplaySettings) {
-      if (widget.useFavoriteDisplaySettings) {
-        appdata.settings.addListener(_onSettingsChanged);
-      } else {
-        appdata.settings.removeListener(_onSettingsChanged);
-      }
-    }
-    if (!comics.isEqualTo(widget.comics)) {
-      comics.clear();
-      for (var comic in widget.comics) {
-        if (isBlocked(comic) == null) {
-          comics.add(comic);
-        }
-      }
-      generateHeroID();
-    }
+    _refreshComics();
     super.didUpdateWidget(oldWidget);
   }
 
   @override
   void initState() {
-    for (var comic in widget.comics) {
-      if (isBlocked(comic) == null) {
-        comics.add(comic);
-      }
-    }
-    generateHeroID();
+    _refreshComics();
     addComicWidgetStateListener(update);
-    if (widget.useFavoriteDisplaySettings) {
-      appdata.settings.addListener(_onSettingsChanged);
-    }
+    appdata.settings.addListener(_onSettingsChanged);
     super.initState();
   }
 
   @override
   void dispose() {
     removeComicWidgetStateListener(update);
-    if (widget.useFavoriteDisplaySettings) {
-      appdata.settings.removeListener(_onSettingsChanged);
-    }
+    appdata.settings.removeListener(_onSettingsChanged);
     super.dispose();
   }
 
   void _onSettingsChanged() {
     if (mounted) {
-      setState(() {});
+      update();
     }
   }
 
   void update() {
-    setState(() {
-      comics.clear();
-      for (var comic in widget.comics) {
-        if (isBlocked(comic) == null) {
-          comics.add(comic);
-        }
-      }
-    });
+    if (mounted) setState(_refreshComics);
   }
 
   @override
@@ -140,7 +117,7 @@ class _SliverGridComicsState extends State<SliverGridComics> {
               ? ComicTileDisplayMode.gallery
               : ComicTileDisplayMode.detailed)
         : null;
-    return _SliverGridComics(
+    final grid = _SliverGridComics(
       comics: comics,
       heroIDs: heroIDs,
       selection: widget.selections,
@@ -154,6 +131,21 @@ class _SliverGridComicsState extends State<SliverGridComics> {
       galleryColumns: favoriteDisplayMode == ComicTileDisplayMode.gallery
           ? favoriteDisplayState.galleryColumns
           : null,
+    );
+    final hidden = widget.comics.length - comics.length;
+    if (!widget.showHiddenCount || hidden == 0) return grid;
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'Hidden by keyword filters: @a comics'.tlParams({'a': hidden}),
+            ),
+          ),
+        ),
+        grid,
+      ],
     );
   }
 }

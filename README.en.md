@@ -25,9 +25,9 @@
 
 ## Introduction
 
-[VeneraNext](https://github.com/CyrilPeng/venera-next) continues development of [Venera](https://github.com/venera-app/venera), a Flutter comic reader for **Android, iOS, Windows, Linux, and macOS**.
+[VeneraNext](https://github.com/CyrilPeng/venera-next) continues development of [Venera](https://github.com/venera-app/venera), a Flutter comic reader for **Android, Android TV, iOS, Windows, Linux, and macOS**, with a **HarmonyOS beta** distributed alongside each release.
 
-This fork focuses on fewer interruptions while reading: scroll across chapters, split wide spreads for vertical reading, and adjust the reader for nighttime or E-Ink devices. Read Later, update tracking, offline downloads, reading statistics, and synchronization connect the rest of the reading workflow.
+This fork focuses on fewer interruptions and more reading: Waterfall mode scrolls across chapters without leaving the reader, long-pressing Favorite skips the folder picker, and nighttime and E-Ink devices get their own reading adjustments. Local import, offline downloads, reading statistics, and multi-device sync make finding comics, reading them, and following ongoing series easier.
 
 Venera's JavaScript extensions, local reading, search and categories, favorites, downloads, and source-dependent login, comments, and ratings remain available.
 
@@ -57,35 +57,42 @@ Venera's JavaScript extensions, local reading, search and categories, favorites,
 
 ## Highlights
 
-### Improvements in this fork
+### Track updates with one long-press
 
-| Improvement | What it adds |
-|---|---|
-| **Waterfall reading across chapters** | The default mode preloads the next chapter near the boundary. Keep scrolling or return to a loaded previous chapter; chapter separators and history follow the actual reading position. |
-| **Split wide spreads vertically** | Stack the two halves of a wide image in vertical Continuous and Waterfall modes, with an option to swap their order. Original image counts and progress are preserved. |
-| **Night dimming** | An independent reader toggle and 20%–100% brightness control in reader settings and the bottom quick panel, alongside the app's light and dark themes. |
-| **E-Ink refresh** | Flash after a configurable number of Gallery page changes, with adjustable duration and black, white, or white-then-black styles to help reduce ghosting. |
-| **Clearer comic details** | Consistent two-row actions on desktop and mobile emphasize Download, Read, and Continue, with chapter progress, update indicators, and a saved chapter sort preference. |
-| **Read Later and update tracking** | Keep titles you want to start separate from ongoing series. The home page provides the reading queue, followed-cover previews, and update indicators. |
-| **Favorites and discovery shortcuts** | Browse favorites in a cover gallery with automatic or 2–6 columns, save author/tag searches, and view saved images in a gallery for each comic. |
-| **Reading statistics** | Track active foreground reading time and view totals, comic counts, and rankings from History or Settings. |
-| **Expanded local library** | Import image folders, CBZ/ZIP/7Z/CB7, PDF, and image-based EPUB; support chapter folders, natural sorting, batch PDF import, CBZ export, and recovery. |
-| **WebDAV library and archives** | Read NAS/WebDAV image folders with directory caching, incremental synchronization, and metadata support; back up local comics as CBZ archives and restore them separately. |
-| **Data and desktop improvements** | Atomic settings writes and recovery, sync status and errors, history cleanup, and Windows installers, portable packages, and winget updates. |
+With the default settings, **long-press Favorite** on a comic's details page to add it straight to the Follow Updates folder, without opening the folder picker. The app checks for updates automatically and shows update counts and comic covers on Home. Tap a cover to open the details page, then choose Read or Continue to start reading.
+
+A fresh install creates this folder automatically (named "追更" by default). To change the quick-favorite or update-tracking folder, see [Favorites, Read Later, and update tracking](#favorites-read-later-and-update-tracking).
+
+### Reading experience
+
+- **Waterfall reading across chapters (non-TV default)**: finish a chapter and keep going — the next chapter loads automatically near the end, and you can scroll back to a previously loaded chapter. Progress is recorded where you actually stopped.
+- **Android TV and boxes**: a separate TV package with a landscape launcher, directional remote navigation, visible focus, and single-page low-memory reading by default. It can coexist with the mobile app.
+- **Split wide spreads vertically**: two-page spreads too small on a phone? Enable split double pages in vertical Continuous/Waterfall modes to stack the two halves, and swap their order to match the reading direction.
+- **Night dimming**: dim the comic inside the reader for nighttime reading, without changing the system brightness.
+- **E-Ink refresh**: Gallery mode can flash the screen at a page-turn interval to help reduce ghosting, with adjustable intervals and styles.
+- **A handier details page**: Download and Read/Continue are easier to find, chapter progress and update indicators are visible at a glance, and your last chapter sort choice is remembered.
+
+### Discovery, favorites, and data
+
+- **Read Later**: keep comics you plan to read in their own list, ready to find on Home.
+- **Local library**: import image folders, CBZ/ZIP/7Z/CB7, PDF, and image-based EPUB and read them right away, with chapter subfolders and natural sorting; local comics can also be exported as CBZ.
+- **WebDAV: sync, backup, and NAS reading**: sync settings, favorites, and reading progress across devices, back up local comics, or read NAS image folders online. Each feature is configured separately.
+- **Reading statistics**: track the time you spend reading; History shows total time, comics read, and time rankings.
+- **Favorites gallery and search shortcuts**: switch favorites to a cover gallery, save frequent author/tag searches as shortcuts, and browse saved images per comic.
 
 ### Core Venera capabilities retained
 
 - **Extensible sources:** use JavaScript to provide search, aggregate search, exploration pages, categories, rankings, and tag translation.
 - **Flexible reading:** Gallery pagination, scrolling within a chapter, zoom, and multi-image layouts, with touch, keyboard, and mobile volume-key controls.
 - **Favorites and offline access:** local and network favorites, history, saved images, and a download queue; read downloaded chapters offline.
-- **Source-dependent interaction:** accounts, cookies, comments and replies, chapter comments, likes, and ratings where implemented by the extension.
+- **Source-dependent interaction:** accounts, cookies, comments and replies, likes, and ratings where implemented by the extension.
 - **Multiple devices:** WebDAV app-data synchronization, import/export, and [headless commands](doc/user/headless.en.md) for scripting.
 
 ---
 
 ## Download and installation
 
-### Android
+### Android phones and tablets
 
 Download an APK from the [latest stable release](https://github.com/CyrilPeng/Venera-Next/releases/latest):
 
@@ -94,8 +101,36 @@ Download an APK from the [latest stable release](https://github.com/CyrilPeng/Ve
 | `VeneraNext-xxx-android.apk` | Universal build | Most Android devices |
 | `VeneraNext-xxx-android-arm64-v8a.apk` | ARM64 build | Android devices that support ARM64 apps |
 | `VeneraNext-xxx-android-armeabi-v7a.apk` | ARM32 build | Older 32-bit devices |
+| `VeneraNext-xxx-android-x86_64.apk` | x86_64 build | x86_64 devices or emulators |
 
 When in doubt, use the universal `VeneraNext-xxx-android.apk` package.
+
+### Android TV
+
+Download a TV APK from the [latest stable release](https://github.com/CyrilPeng/venera-next/releases/latest):
+
+| File | Description | Recommended for |
+|---|---|---|
+| `VeneraNext-xxx-android-tv.apk` | Universal TV build | Most Android TVs or boxes |
+| `VeneraNext-xxx-android-tv-arm64-v8a.apk` | TV ARM64 build | TVs or boxes that support ARM64 apps |
+| `VeneraNext-xxx-android-tv-armeabi-v7a.apk` | TV ARM32 build | TVs or boxes with a 32-bit OS |
+| `VeneraNext-xxx-android-tv-x86_64.apk` | TV x86_64 build | x86_64 devices or emulators |
+
+When in doubt, use the universal `VeneraNext-xxx-android-tv.apk` package.
+
+Transfer the APK to the TV and sideload it. Its launcher name is **VeneraNext TV**; it can coexist with the mobile app and keeps its data separate.
+
+See [TV remote controls and low-memory reading](#tv-remote-controls-and-low-memory-reading) for usage and [Android TV Distribution](doc/distribution/android_tv.en.md) for installation and upgrade details.
+
+### HarmonyOS (Beta)
+
+Download a HarmonyOS package from the [release page](https://github.com/CyrilPeng/Venera-Next/releases). Starting with `v1.18.3-rc.3`, every prerelease and stable release includes the matching HarmonyOS beta:
+
+| File | Description | Recommended for |
+|---|---|---|
+| `VeneraNext-xxx-harmonyos-arm64-unsigned.hap` | Unsigned ARM64 beta | HarmonyOS phones and tablets meeting API 26 requirements |
+
+Sign and sideload it yourself. Keep the original signing key for upgrades; do not uninstall or clear data. See the [HarmonyOS beta installation guide](doc/distribution/harmonyos-reader.en.md) for instructions and limitations.
 
 ### iOS
 
@@ -125,7 +160,7 @@ Download the package matching your distribution and architecture from the [lates
 | Arch Linux (x86_64) | `sudo pacman -U ./venera-next-xxx-x86_64.pkg.tar.zst` |
 | AppImage (x86_64 / ARM64) | Run `chmod +x VeneraNext-xxx-x86_64.AppImage`, then `./VeneraNext-xxx-x86_64.AppImage` (use the `aarch64` file on ARM64) |
 
-Replace `xxx` with the actual version in the downloaded filename. The v1.18.0 stable release includes RPM and AppImage packages for both x86_64 and ARM64. Use `uname -m` to check your architecture.
+Replace `xxx` with the actual version in the downloaded filename. RPM and AppImage packages are available for both x86_64 and ARM64. Use `uname -m` to check your architecture.
 
 Linux packages are built on Ubuntu 22.04 with a glibc 2.35 baseline. The current stable AppImage includes GTK 3 and WebKitGTK 4.1, so no separate GTK/WebKit installation is needed. It still requires host glibc 2.35 or newer and compatible OpenGL/EGL graphics drivers. See [Linux Installation and Distribution](doc/distribution/linux.en.md) for dependencies, FUSE troubleshooting, and distribution compatibility.
 
@@ -137,51 +172,48 @@ Download `VeneraNext-xxx.dmg` from the [latest stable release](https://github.co
 
 ## Quick start
 
-1. Install the appropriate build from the [latest stable release](https://github.com/CyrilPeng/venera-next/releases/latest).
-2. Choose a channel: use Local → Import for existing images, archives, or image documents; install a compatible extension for network reading; configure Settings → App → WebDAV Comic Library for a NAS.
-3. Choose a mode in Settings → Reader. Waterfall is the default for long series; Gallery turns pages; Continuous scrolls within the current chapter.
-4. Adjust split spreads, night dimming, or E-Ink refresh for your device. Enable device-specific or per-comic settings when needed.
-5. Use Read/Continue or select a chapter. Put titles you will start later in Read Later, and ongoing series in the folder used for update tracking.
-6. Download chapters for offline use. Configure data sync, comic archives, or the online library according to your cross-device needs.
+1. **Install** the build for your platform from the [latest stable release](https://github.com/CyrilPeng/venera-next/releases/latest); on a TV, choose the separate package described under [Android TV](#android-tv).
+2. **Add content** (any one of these is enough to get started): existing comic files → Local → Import; network series → install an extension in Comic Source management; a NAS folder → Settings → APP → WebDAV Comic Library.
+3. **Start reading**: phones and desktops default to Waterfall reading across chapters, while TV defaults to single-page low-memory reading. When you find a series to follow, try long-pressing the Favorite button on its details page. Reading mode, split spreads, night dimming, and more can be adjusted anytime in Settings → Reading or inside the reader.
 
 ## Usage guide
 
 ### Reading modes and progress
 
-| Mode | Directions | Suitable for |
+| Mode | Directions | Best for |
 |---|---|---|
-| Waterfall | Top to bottom | Continuous reading across chapters, loading adjacent chapters near boundaries |
-| Gallery | Left to right, right to left, top to bottom | Page turns, with configurable multi-image layouts |
-| Continuous | Left to right, right to left, top to bottom | Scrolling inside the current chapter with explicit chapter boundaries |
+| Waterfall (non-TV default) | Top to bottom | Continuous reading across chapters; adjacent chapters load near boundaries |
+| Gallery | L→R / R→L / T→B | Page-by-page reading with configurable multi-image layouts |
+| Continuous | L→R / R→L / T→B | Scrolling inside the current chapter with explicit boundaries |
 
-- **Preloading:** Waterfall reuses the image preload count. Larger values may load content earlier and increase network and memory use.
-- **Split wide images:** available in vertical Continuous and Waterfall only. Swap the split order if needed; page counts still refer to original images.
-- **Resume:** history stores chapter, page, and chapter group. Waterfall records the chapter actually being read. Ascending/descending on the details page only changes the chapter list display.
-- **Setting scope:** reader settings fall back from enabled per-comic settings to enabled device settings and then global settings.
+- **Preloading:** adjust the image preload count in Settings → Reading to prepare upcoming images and reduce waits. Loading more images also uses more data and memory.
+- **Resume:** progress stores the chapter and page, and Waterfall records the chapter you are actually reading. Ascending/descending on the details page only changes the list display.
+- **Separate reader settings:** enable device-specific or per-comic settings so you do not have to readjust them each time.
 
 | Single-page view | Split double-page view |
 |---|---|
 | <a href="https://git-pictures.cyrilworkshop.dpdns.org/veneranext/Single%20Page%20View.jpg"><img src="https://git-pictures.cyrilworkshop.dpdns.org/veneranext/Single%20Page%20View.jpg" alt="A wide page before splitting" width="100%" /></a> | <a href="https://git-pictures.cyrilworkshop.dpdns.org/veneranext/Double%20Page%20View.jpg"><img src="https://git-pictures.cyrilworkshop.dpdns.org/veneranext/Double%20Page%20View.jpg" alt="The same spread with double-page splitting enabled" width="100%" /></a> |
 
+### TV remote controls and low-memory reading
+
+- **Main UI:** use direction keys to move focus and Select / gamepad A to activate; Back / gamepad B returns. Remotes with a menu key can open context menus on supported controls.
+- **Reading surface:** direction keys turn pages or scroll; Select opens the reader menu. While the menu is open, direction keys navigate controls without turning pages in the background. Back closes the menu first, then saves progress and exits the reader.
+- **Low-memory defaults:** single-page reading, one-page preloading, a 64 MiB decoded-image cache, and an approximately 2.07-megapixel decode budget. Disable Settings → Reading → TV low-memory mode to restore previous settings and use modes such as Waterfall. This switch is device-local and excluded from backups and synchronization.
+- **Usage notes:** low-memory mode leaves originals unchanged, but long strips and zoomed details may look softer. Web login, CAPTCHA, file pickers, and similar flows may need an input method or companion device.
+
 ### Nighttime and E-Ink reading
 
-Choose a light, dark, or system theme in Settings → Appearance. **Night dimming** independently darkens the comic in the reader: enable it in reader settings or the bottom quick panel and adjust brightness from 20% to 100%. This changes the in-app image, not the device's system brightness.
+- **Night dimming:** turn it on inside the reader (reader settings or the bottom quick panel) and dim from 20% to 100%; it affects only the in-app image. Choose the app's light/dark/system theme in Settings → Appearance.
+- **E-Ink:** enable E-Ink refresh in Gallery mode and choose a flash every 1–10 page turns, a duration of 100–1500 ms, and a black, white, or white-then-black style. Continuous and Waterfall do not trigger it.
 
-For E-Ink devices, choose **Gallery mode** and enable E-Ink display refresh. Set a flash every 1–10 page changes, a duration of 100–1500 ms, and a black, white, or white-then-black style. This is a flash drawn by the reader; results depend on the device's own refresh behavior. Continuous and Waterfall do not trigger it.
+### Favorites, Read Later, and update tracking
 
-### Comic details, Read Later, and update tracking
-
-- **Details:** common interactions and the Download/Read buttons occupy separate rows. Continue, chapter progress, update indicators, and a remembered ascending/descending choice make returning to a comic easier.
-- **Read Later:** add/remove a title from comic details or the local-comic menu and open the full list from Home. Reading does not automatically remove it. Its separate local favorites folder can be renamed, deleted, and synchronized.
-- **Update tracking:** checks comics in the selected local favorites folder. Home shows covers and update counts. The default quick-favorite target can be the follow folder; existing valid preferences and an explicit disabled state are preserved. Long-press Favorite on the details page for quick favorite.
-- **Update detection:** relies on a valid update date supplied by comic details. An additional chapter alone does not guarantee detection. Update indicators can be disabled in Settings.
-- **Authors and tags:** save searchable author/tag targets as shortcuts on the search page. A shortcut stores search criteria; it does not automatically follow every work by an author.
-
-### Favorites, images, and reading statistics
-
-Local favorites are managed by the app; network favorites depend on the source account and extension. The cover gallery supports automatic or 2–6 column layouts, and saved images can be browsed in a gallery for each comic.
-
-History stores reading position and active foreground time, with totals, comic counts, and time rankings. Settings also links to reading statistics. History can be cleaned by retention period. Leaving the reader or entering the background records the corresponding active reading period.
+- **Favorites:** tap Favorite on the details page to open the panel and pick a local folder or the source account (extension-dependent). The favorites page supports list and cover-gallery layouts (auto or 2–6 columns).
+- **Quick Favorite:** long-press Favorite on the details page to add the comic directly to the selected local folder, which defaults to the Follow Updates folder. Change the target in Settings → Local Favorites → Quick Favorite.
+- **Update tracking settings:** open Follow Updates from Home to choose which folder to track, or select Check Now to refresh manually.
+- **Read Later:** add or remove a title from comic details or the local-comic menu and open the full list from Home; opening a comic does not remove it.
+- **Reading statistics:** History shows total reading time, comics read, and time rankings; history can be cleaned by retention period.
+- **Search shortcuts:** save frequent author/tag searches as shortcuts and reuse them from the search page.
 
 ### Local comics and offline downloads
 
@@ -190,12 +222,10 @@ History stores reading position and active foreground time, with totals, comic c
 | Image folders | Single or batch imports, including chapter subfolders; optional covers and natural filename ordering |
 | CBZ / ZIP / 7Z / CB7 | Extract into the local library, including archives with a top-level folder and chapter subfolders |
 | PDF | Sequential multi-file import with progress and cancellation; render pages to local JPEGs and use the first page as the cover |
-| Image-based EPUB | Extract raster images in spine order and retain title, author, cover, and usable chapter navigation where possible |
+| Image-based EPUB | Import comic images in the EPUB's reading order, keeping title, author, cover, and chapter navigation where available |
 | Source downloads | Store downloaded chapters in the local library for offline reading, later export, and archival |
 
-CBZ export, scanning to recover downloads, chapter deletion, and storage migration are available. PDF/EPUB imports consume additional storage. Text-only EPUB, directly drawn SVG pages, encrypted PDF, and MOBI/AZW/AZW3 are unsupported.
-
-See [local import, CBZ, and WebDAV library rules](doc/user/import_comic.en.md) for folder examples, archive compatibility, and metadata templates.
+CBZ export, scanning to recover downloads, chapter deletion, and storage migration are available. PDF/EPUB imports consume additional storage; text-only EPUB, directly drawn SVG pages, encrypted PDF, and MOBI/AZW/AZW3 are not supported. See [local import, CBZ, and WebDAV library rules](doc/user/import_comic.en.md) for folder examples, archive compatibility, and metadata templates.
 
 ### Network comic extensions
 
@@ -207,15 +237,15 @@ Add a compatible script link or file in Comic Source management. To write an ext
 
 These are configured separately:
 
-| Capability | Entry in Settings → App | Purpose |
+| Capability | Entry in Settings → APP | Purpose |
 |---|---|---|
 | App-data synchronization | Data Sync | Synchronize settings, favorites, history, cookies, and source files; local comic images are excluded |
 | Comic archives | Comic Archive Backup | Upload local comics as CBZ archives or download archives into the local library |
 | Online library | WebDAV Comic Library | Load remote image folders on demand and cache directory information and images |
 
-The online library accepts ordinary image folders, chapter folders, and extracted CBZ exports from VeneraNext. Valid `metadata.json` can supply title, author, tags, chapter page ranges, and identify comic roots in nested folders. Invalid metadata falls back to ordinary folder detection.
+The online library accepts image folders, chapter subfolders, and extracted CBZ exports from VeneraNext. A `metadata.json` file can add title, author, tags, and chapter information. The shelf shows cached comics first, then checks for new or changed content on the server. You can sync manually or set an automatic update interval.
 
-The shelf displays cached entries first and checks remote changes incrementally. Manual synchronization and an automatic update interval are available. Remote CBZ/ZIP/7Z/CB7 files cannot be previewed directly: extract them on the server, or restore an archive for local reading. [Folder and metadata rules](doc/user/import_comic.en.md#webdav-online-library)
+Remote CBZ/ZIP/7Z/CB7 archives must be extracted on the server or restored locally before reading. See [folder and metadata rules](doc/user/import_comic.en.md#webdav-online-library).
 
 ## Developing comic sources
 
@@ -238,9 +268,15 @@ This fork continues to maintain Venera-compatible extension interfaces. Waterfal
 
 No source or recommended catalog is bundled. Import local comics or configure a legal compatible extension or WebDAV library.
 
-### Why are searches, images, or update indicators missing?
+### Why are search results or images missing?
 
-Check the extension, login/cookies, service availability, and network. Update tracking additionally requires a valid update date. Contact the relevant maintainer for site/content issues. Reader or extension-runtime problems reproducible independently of a particular site can be reported under the [contribution guidelines](CONTRIBUTING.en.md).
+Check the comic source extension, login status (cookies), service availability, and network first. Contact the relevant extension maintainer for site and content issues. Reader or extension-runtime problems reproducible independently of a particular site can be reported under the [contribution guidelines](CONTRIBUTING.en.md).
+
+### How often are updates checked, and why are some updates not flagged?
+
+- **Automatic checks:** while the app is running, checks run every 10 minutes and skip comics successfully checked within the past 24 hours. Select Check Now on the Follow Updates page to refresh immediately.
+- **Update detection:** a comic is flagged when the extension returns a changed, valid update time. A new chapter without a changed update time may not be flagged.
+- **Update indicators:** Settings → Explore → Show update status on comic tile controls indicators on comic thumbnails, not update checking or the count on the Home card.
 
 ### How do I shrink strip comics on a tablet?
 
@@ -253,6 +289,7 @@ Run `winget upgrade --id CyrilPeng.VeneraNext --exact`. Public-source availabili
 ## Developer resources
 
 - [Build and Development](doc/development/build.en.md): Flutter/Rust, locked dependencies, tests, and releases.
+- [HarmonyOS Release Builds](doc/development/harmonyos_releases.en.md): pinned branch source, independent SDK, unsigned HAP and publication gates.
 - [Contributing](CONTRIBUTING.en.md) · [Dependency Governance](doc/development/dependencies.en.md).
 - [Windows Distribution](doc/distribution/windows.en.md) · [Headless Mode](doc/user/headless.en.md).
 - [Security Policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Documentation Index](doc/README.en.md).

@@ -6,7 +6,14 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_qjs/flutter_qjs.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venera_next/features/comic_source/source_images_parser.dart';
+import 'package:venera_next/features/comic_source/source_parser_context.dart';
+import 'package:venera_next/features/reader/history_writer.dart';
+import 'package:venera_next/features/reader/reader_controller.dart';
+import 'package:venera_next/features/reader/reader_session.dart';
+import 'package:venera_next/features/reader/reading_session.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/image_work.dart';
 import 'package:venera_next/foundation/js_engine.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/network/request_scope.dart';
@@ -201,6 +208,221 @@ void main() {
           engine.runCode('void completeHttpRead(["late HTTP page"])');
           await checked;
           scope.dispose();
+        },
+      );
+
+      for (final bytes in [false, true]) {
+        test(
+          'HTTP cancellation keeps its type after a JS request rejects; bytes=$bytes',
+          () async {
+            final scope = RequestScope();
+            final result = scope.runToCompletion(
+              () => engine.runReadCodeToCompletion('''
+              (async () => {
+                const response = await sendMessage({
+                  method: "http", http_method: "GET", bytes: $bytes,
+                  url: "https://example.invalid/chapter"
+                });
+                if (response.error) throw response.error;
+                return response.body;
+              })()
+              ''', consume: (_) => fail('cancelled request consumed data')),
+            );
+            final checked = expectLater(
+              result,
+              throwsA(isA<RequestCancelled>()),
+            );
+            await adapter.started.future;
+            scope.cancel();
+            await adapter.cancelled;
+            adapter.response.complete(ResponseBody.fromString('late', 200));
+            try {
+              await checked;
+            } finally {
+              scope.dispose();
+            }
+          },
+        );
+      }
+
+      test('an unrelated JS rejection is not hidden by cancellation', () async {
+        final scope = RequestScope();
+        final result = scope.runToCompletion(
+          () => engine.runReadCodeToCompletion('''
+          (async () => {
+            const response = await sendMessage({
+              method: "http", http_method: "GET",
+              url: "https://example.invalid/chapter"
+            });
+            throw "source validation failed";
+          })()
+          ''', consume: (_) => fail('failed source consumed data')),
+        );
+        final checked = expectLater(
+          result,
+          throwsA('source validation failed'),
+        );
+        await adapter.started.future;
+        scope.cancel();
+        await adapter.cancelled;
+        adapter.response.complete(ResponseBody.fromString('late', 200));
+        try {
+          await checked;
+        } finally {
+          scope.dispose();
+        }
+      });
+
+      test(
+        'reader exit drains a cancelled production chapter without failing',
+        () async {
+          await engine.runCode(await File('assets/init.js').readAsString());
+          engine.runCode('''
+          void (ComicSource.sources.exit_fixture = {comic: {
+            loadEp: async () => {
+              try {
+                await Network.get("https://example.invalid/chapter");
+              } catch (error) {
+                await new Promise(resolve => { globalThis.finishCancelledChapter = resolve; });
+                throw error;
+              }
+              return {images: ["page"]};
+            }
+          }});
+        ''');
+          final callbacks = JsCallbackScope(engine: engine);
+          final parser = SourceImagesParser(
+            SourceParserContext(
+              key: 'exit_fixture',
+              name: 'Exit fixture',
+              callbacks: callbacks,
+              identity: JsSourceIdentity(
+                engine,
+                engine.runCode(
+                      '__sourceRuntime.identity(ComicSource.sources.exit_fixture)',
+                    )
+                    as String,
+              ),
+            ),
+          );
+          final work = ImageWork();
+          final controller = ReaderController(
+            pageCount: () => 1,
+            chapterCount: () => 1,
+            animationEnabled: () => false,
+            viewport: () => null,
+            onChanged: () {},
+            onPageChanged: () {},
+            onError: (error, stack) => fail('$error\n$stack'),
+          );
+          var progressWrites = 0;
+          var notifications = 0;
+          final session = ReaderSession(
+            imageWork: work,
+            durations: ReadingSessionTracker(onDuration: (_) async {}),
+            progress: ReaderHistoryWriter(
+              write: () async => progressWrites++,
+              onError: (error, stack) => fail('$error\n$stack'),
+            ),
+            pauseAutoReading: (_) {},
+            onClosed: () => notifications++,
+            foreground: true,
+          );
+          try {
+            final attempt = controller.beginContentLoad();
+            final loading = controller.loadContent(
+              attempt,
+              imageWork: work,
+              beforeLoad: () async {},
+              loadImages: (scope) => scope.runToCompletion(() async {
+                final result = await parser.parseLoadComicPagesFunc()!(
+                  'book',
+                  'one',
+                );
+                if (result.error) {
+                  final failure = result.failure!;
+                  Error.throwWithStackTrace(
+                    failure.cause ?? failure,
+                    failure.stackTrace!,
+                  );
+                }
+                return result.data;
+              }),
+              prepareMode: () async =>
+                  fail('cancelled chapter must not prepare'),
+            );
+            await adapter.started.future;
+            session.scheduleProgress();
+            var prepared = false;
+            final preparing = session.prepareForExit().then((release) {
+              prepared = true;
+              return release;
+            });
+            await adapter.cancelled;
+            await pumpEventQueue();
+            expect(prepared, isFalse);
+            expect(progressWrites, 1);
+            expect(
+              engine.runCode('typeof finishCancelledChapter === "function"'),
+              isTrue,
+            );
+            adapter.response.complete(ResponseBody.fromString('late', 200));
+            engine.runCode('void finishCancelledChapter()');
+            final release = await preparing;
+            expect(await loading, ReaderContentLoadResult.ignored);
+            expect(notifications, 1);
+            expect(controller.content.error, isNull);
+            release();
+          } finally {
+            if (!adapter.response.isCompleted) {
+              adapter.response.complete(
+                ResponseBody.fromString('cleanup', 200),
+              );
+            }
+            if (engine.runCode(
+                  'typeof finishCancelledChapter === "function"',
+                ) ==
+                true) {
+              engine.runCode('void finishCancelledChapter()');
+            }
+            callbacks.dispose();
+            controller.dispose();
+            await session.dispose();
+          }
+        },
+      );
+
+      test(
+        'a retained image callback retains typed HTTP cancellation',
+        () async {
+          final scope = RequestScope();
+          final callbacks = JsCallbackScope(engine: engine);
+          final function =
+              engine.runOwnedCode('''
+          async () => {
+            const response = await sendMessage({method: "http", http_method: "GET",
+              url: "https://example.invalid/image-config"});
+            if (response.error) throw response.error;
+            return response.body;
+          }
+        ''')
+                  as JSInvokable;
+          final callback = callbacks.retain(function);
+          final result = scope.runToCompletion(() async {
+            await invokeJsCallbackToCompletion(callback, []);
+          });
+          final checked = expectLater(result, throwsA(isA<RequestCancelled>()));
+          await adapter.started.future;
+          scope.cancel();
+          await adapter.cancelled;
+          adapter.response.complete(ResponseBody.fromString('late', 200));
+          try {
+            await checked;
+          } finally {
+            callbacks.dispose();
+            function.free();
+            scope.dispose();
+          }
         },
       );
     },

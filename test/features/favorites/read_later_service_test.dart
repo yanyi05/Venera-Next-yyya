@@ -6,6 +6,37 @@ import 'package:venera_next/features/favorites/read_later_service.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 
 void main() {
+  test(
+    'automatic read-later folder avoids case-insensitive name collisions',
+    () {
+      final db = sqlite3.openInMemory();
+      addTearDown(db.dispose);
+      final repository = FavoritesRepository(db)..initializeMetadata();
+      repository.createFolder('later');
+      repository.createFolder('LATER (2)');
+      final service = ReadLaterService(
+        repository: () => repository,
+        configuredFolder: () => null,
+        translateTags: (_) => '',
+      );
+      final result = service.set(
+        FavoriteItem(
+          id: 'kept',
+          name: 'Comic',
+          author: '',
+          coverPath: '',
+          type: ComicType.local,
+          tags: [],
+        ),
+        included: true,
+        folderName: 'Later',
+      );
+      expect(result.folder, 'Later (3)');
+      expect(repository.count('later'), 0);
+      expect(repository.count('Later (3)'), 1);
+    },
+  );
+
   test('failed member insertion rolls back the new folder', () {
     final db = sqlite3.openInMemory();
     addTearDown(db.dispose);
@@ -93,8 +124,8 @@ void main() {
 class _FailingInsertRepository extends FavoritesRepository {
   _FailingInsertRepository(super.db);
   @override
-  void createFolder(String folder) {
-    super.createFolder(folder);
+  void createFolder(String folder, {String? parentId}) {
+    super.createFolder(folder, parentId: parentId);
     db.execute('''CREATE TRIGGER fail_insert BEFORE INSERT ON "$folder"
       BEGIN SELECT RAISE(ABORT, 'insertion failed'); END;''');
   }

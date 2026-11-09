@@ -280,6 +280,7 @@ class _Fixture {
             body: SizedBox.expand(
               child: ReaderScaffold(
                 data: ReaderShellData(
+                  chapterId: '1',
                   comicId: 'book',
                   sourceKey: 'local',
                   title: 'Book',

@@ -10,6 +10,22 @@ features continue to work.
 Supported comic image extensions are `jpg`, `jpeg`, `jpe`, `png`, `webp`,
 `gif`, and `avif`.
 
+If an imported entry is not visible, check the local search and keyword filters
+first. The list reports how many entries are hidden by keyword filters; favorites
+also explain reading-status exclusions without changing those rules. Unicode,
+brackets and double extensions do not by themselves make a filename invalid.
+Check the actual success/failure counts and named errors for batch imports;
+do not rename all archives or delete data as a first step.
+
+The number at the top left in multi-select mode is the selection count, not the
+import success count. Starting with v1.18.2-rc.3, local-list bulk selection no
+longer includes hidden entries or keeps stale selection after refresh; v1.18.1
+and the earlier rc.1/rc.2 do not contain this fix. This does not resolve every
+reported Android archive-visibility scenario. Distinguish
+import results, visible/hidden entries and selection counts when reporting, and
+include the full version and whether single or batch archive import was used;
+there is no need to clear data or upload private archives again.
+
 ## Restore Local Downloads
 
 If you migrated the app and kept the local download folder but lost `local.db`,
@@ -97,6 +113,41 @@ Cat's Eye.cbz
 If there is no `cover.[ext]` in the root folder, the first image from the first
 chapter is used as the cover.
 
+### HarmonyOS Comic Collection ZIP
+
+The development branch accepts both layouts below through **Comic collection ZIP**.
+Automatic outer-folder detection has not yet shipped in an installation package.
+
+```text
+Collection.zip                  Collection.zip
+|-- Book A/images               `-- Outer folder/
+`-- Book B/chapters/images           |-- Book A/images
+                                    `-- Book B/chapters/images
+```
+
+Only one optional outer folder is detected; arbitrary nesting is not flattened.
+One top-level folder containing image-only subfolders could mean separate comics
+or the chapters of one comic. In that case, the app previews the folder names and
+asks which layout to use, with no preselected answer. Cancelling imports nothing;
+you do not need to repackage the ZIP. A comic root containing a cover or pages is
+not automatically removed.
+
+Comic and chapter names are preserved. **An archive file** still imports one book
+and never automatically splits its chapters into books. Hidden system sidecars
+are ignored for layout detection, but all archive paths must still pass validation.
+
+### Migrated Settings and Favorites
+
+The development branch fixes `Favorite registration identity is already in use`
+after importing old settings. New comics receive an ID unused by both the local
+library and every favorite folder for the same comic type. Imports without a
+selected favorite folder also avoid accidentally linking to an old favorite.
+
+There is no need to delete old favorites or clear the database before importing
+new comics. The fix does not match records by title, rewrite existing favorites
+or paths, or modify original comic files. External paths from another platform
+still require separate migration; importing settings does not make them accessible.
+
 ## PDF and Image-based EPUB
 
 Open `Local` -> `Import` and select either a PDF comic file or an image-based
@@ -130,6 +181,37 @@ MOBI, AZW, and AZW3 are not supported. Convert them externally to an image-based
 EPUB, PDF, or CBZ before importing.
 
 Document import never overwrites an existing comic with the same title.
+
+## WebDAV CBZ Archive Results and Retries
+
+Starting with v1.18.2-rc.4 (#126), archiving local comics to WebDAV and downloading
+archives for import keep a result dialog open with each title, remote filename,
+status and selectable error details instead of a brief count-only message.
+v1.18.1 and earlier release candidates do not include these result and retry
+improvements.
+
+- Retry one failed item or all failed items without replaying successful uploads
+  or imports. Cancellation waits for active work to finish safely, keeps completed
+  items and leaves unstarted items available to continue in the same dialog.
+- An initially existing remote name is skipped as unverified, not counted as a
+  successful archive. Uploads send `If-None-Match: *` and never fall back to an
+  unconditional overwrite to bypass a conflict. Real-service support for this
+  condition still needs validation.
+- If an upload failed but a same-name file appeared remotely, retry downloads it
+  and compares SHA-256 with the bytes actually uploaded by that item. Only a match
+  confirms success; a mismatch or missing original digest stays a conflict without
+  deleting remote files. Verification needs extra bandwidth and temporary space.
+- If import registration was committed or its outcome is uncertain, direct retry
+  is disabled. Check the local entry, cover, pages and visibility after restarting
+  before importing again; do not clear data or delete potentially saved files.
+- Results and retry records last only until this dialog closes. There is no
+  background or cross-restart queue. Record errors before closing and check for
+  credentials, private links and personal paths before sharing; default redaction
+  is not a complete anonymization guarantee.
+
+This improves result visibility and recovery, not the unconfirmed root cause of
+123 Cloud failures. App-data synchronization and online WebDAV reading are
+unchanged.
 
 ## WebDAV Online Library
 

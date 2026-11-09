@@ -1,13 +1,16 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show visibleForTesting, kReleaseMode;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:yaml/yaml.dart';
 
+import 'harmonyos.dart';
+
 class _App {
   String version = "0.0.0";
+  String buildVersion = "0.0.0";
 
   bool get isAndroid => Platform.isAndroid;
 
@@ -19,10 +22,12 @@ class _App {
 
   bool get isMacOS => Platform.isMacOS;
 
+  bool get isHarmonyOS => HarmonyOS.isCurrent;
+
   bool get isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  bool get isMobile => Platform.isAndroid || Platform.isIOS;
+  bool get isMobile => Platform.isAndroid || Platform.isIOS || isHarmonyOS;
 
   // Whether the app has been initialized.
   // If current Isolate is main Isolate, this value is always true.
@@ -42,8 +47,24 @@ class _App {
 
   Future<void> init() async {
     await _initVersion();
-    cachePath = (await getApplicationCacheDirectory()).path;
-    dataPath = (await getApplicationSupportDirectory()).path;
+    // Smoke builds use an isolated profile; release builds always use normal storage.
+    const testRoot = String.fromEnvironment('VENERA_TEST_DATA_ROOT');
+    if (!kReleaseMode && testRoot.isNotEmpty) {
+      dataPath = p.join(Directory(testRoot).absolute.path, 'support');
+      cachePath = p.join(Directory(testRoot).absolute.path, 'cache');
+      await Directory(dataPath).create(recursive: true);
+      await Directory(cachePath).create(recursive: true);
+      isInitialized = true;
+      return;
+    }
+    if (isHarmonyOS) {
+      final directories = await HarmonyOS.directories();
+      cachePath = directories.cache;
+      dataPath = directories.data;
+    } else {
+      cachePath = (await getApplicationCacheDirectory()).path;
+      dataPath = (await getApplicationSupportDirectory()).path;
+    }
     if (isWindows) {
       await _migrateLegacyWindowsPath(cachePath);
       await _migrateLegacyWindowsPath(dataPath);
@@ -110,7 +131,8 @@ class _App {
   Future<void> _initVersion() async {
     final pubspec = await rootBundle.loadString("pubspec.yaml");
     final data = loadYaml(pubspec);
-    version = data["version"].toString().split('+').first;
+    buildVersion = data["version"].toString();
+    version = buildVersion.split('+').first;
   }
 }
 

@@ -67,7 +67,7 @@ git diff --check
 
 CI runs `flutter test --coverage`, publishes line coverage in the workflow summary, and uploads `coverage/lcov.info`. Coverage is currently a visible baseline rather than a repository-wide hard threshold. Changes to critical behavior still require focused tests.
 
-Pull requests also run `依赖安全审查` and `PR 平台冒烟构建`. Dependency review blocks newly introduced dependencies with high or critical vulnerabilities. Changes to Flutter code, native platform directories, dependencies, build scripts, or workflows run Android Debug and Windows Debug builds; documentation-only changes skip those platform jobs. Dart formatting is checked only for Dart files changed by the current PR, so historical formatting differences do not block new contributions. The `main` branch requires code analysis, dependency review, and the platform smoke-build gate to pass, and direct force-pushes or branch deletion are disabled.
+Pull requests also run `依赖安全审查` and `PR 平台冒烟构建`. Dependency review blocks newly introduced dependencies with high or critical vulnerabilities. Changes to Flutter code, native platform directories, dependencies, build scripts, or workflows run Android mobile/TV Debug and Windows Debug builds; documentation-only changes skip those platform jobs. Quality checks also run navigation, input, low-memory, and update regressions with the actual TV flavor. Dart formatting is checked only for Dart files changed by the current PR, so historical formatting differences do not block new contributions. The `main` branch requires code analysis, dependency review, and the platform smoke-build gate to pass, and direct force-pushes or branch deletion are disabled.
 
 For release-related changes, also run:
 
@@ -97,10 +97,11 @@ Build the APK:
 
 ```bash
 flutter pub get --enforce-lockfile
-flutter build apk --release
+flutter build apk --release --flavor mobile
+flutter build apk --release --flavor tv
 ```
 
-Artifacts are normally written to `build/app/outputs/apk/release/`.
+Artifacts are written to `build/app/outputs/apk/mobile/release/` and `build/app/outputs/apk/tv/release/`. Explicitly pass `--flavor mobile` or `--flavor tv` for Android. Do not set a global `default-flavor`, which would interfere with the existing iOS/macOS Xcode schemes. Enabling Android in GitHub Actions builds both. See [Android TV Distribution](../distribution/android_tv.en.md) for its separate package, version-code offset, updates, and release checks.
 
 Signing files and passwords are sensitive and must not be committed.
 
@@ -153,7 +154,9 @@ Android release workflows require these repository Secrets:
 
 After a stable release, the AltStore workflow reuses the fixed `automation/update-altstore` branch and creates a pull request. Configure `ALTSTORE_PR_TOKEN` with permission to push a branch and create pull requests in this repository; when it is not configured, the workflow falls back to `WINGET_PKGS_TOKEN`. A missing token or failed PR creation now fails the job instead of reporting success with only an orphan branch.
 
-AI issue checking is disabled by default. After confirming that `API_URL` and `API_KEY` work, set the repository variable `ENABLE_AI_ISSUE_CHECK` to `true`; `ISSUE_CHECK_MODEL` can override the default model. The workflow posts summaries and close recommendations only and never closes an issue automatically.
+Issue classification and format checks run by default without an AI API. `.github/scripts/issue_policy.py` validates structured reports, category-specific evidence and classification/missing-information labels. New/edit/reopen and comment changes trigger rechecks; the same bot comment is updated. Bot events, PRs, closed Issues and historical formats are skipped. Required labels are created when absent; existing label colors and descriptions are preserved. See the [reporting guide](../user/issue_reporting.en.md).
+
+Optional AI summaries are disabled by default and run only for complete opened/edited reports. After verifying `API_URL` and `API_KEY`, set `ENABLE_AI_ISSUE_CHECK` to `true`; `ISSUE_CHECK_MODEL` can override the model. Format and AI jobs have separate per-Issue queues; skipped bot jobs cannot replace pending human checks, and slow AI calls do not block later format checks. AI updates its marked comment using the body and reporter/maintainer supplements; failure does not affect the fixed rules. Suggestions require maintainer review and never close Issues. Issue text is not interpolated into shell commands, and automation does not download attachments.
 
 Never put Secrets, signing files, or real passwords in code, logs, or documentation examples.
 

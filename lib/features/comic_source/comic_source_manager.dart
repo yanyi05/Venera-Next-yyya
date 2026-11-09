@@ -38,6 +38,7 @@ void configureRuntimeComicSourcesProvider(
 
 class ComicSourceManager with ChangeNotifier, Init {
   final List<ComicSource> _sources = [];
+  bool loadInstalledSources = true;
 
   static ComicSourceManager? _instance;
 
@@ -290,7 +291,9 @@ class ComicSourceManager with ChangeNotifier, Init {
         await Directory(path).create();
       } else {
         await for (var entity in Directory(path).list()) {
-          if (entity is File && entity.path.endsWith(".js")) {
+          if (loadInstalledSources &&
+              entity is File &&
+              entity.path.endsWith(".js")) {
             try {
               final parser = ComicSourceParser(dataStorage: _dataStorage);
               final source = await parser.parse(

@@ -7,6 +7,8 @@ import 'package:venera_next/components/window_frame.dart';
 import 'package:venera_next/components/window_selection_task.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/harmonyos.dart';
+import 'package:venera_next/foundation/app_profile.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
 
 import 'platform_effects_controller.dart';
@@ -15,7 +17,9 @@ export 'platform_effects_controller.dart' show ReaderOrientation;
 
 final _nativeEffects = ReaderPlatformEffectsCoordinator(
   applyScreenAwake: (awake) async {
-    if (App.isAndroid || App.isIOS) {
+    if (App.isHarmonyOS) {
+      await HarmonyOS.setScreenAwake(awake);
+    } else if (App.isAndroid || App.isIOS) {
       await const MethodChannel('venera/method_channel').invokeMethod<void>(
         'setScreenOn',
         App.isAndroid ? <String, bool>{'set': awake} : awake,
@@ -59,7 +63,10 @@ class ReaderPlatformEffectsBinding {
        _frame = context.getInheritedWidgetOfExactType<WindowFrameController>() {
     handle = coordinator.createOwner(
       orientationEnabled:
-          orientationEnabled ?? defaultTargetPlatform == TargetPlatform.android,
+          orientationEnabled ??
+          (App.isHarmonyOS ||
+              (defaultTargetPlatform == TargetPlatform.android &&
+                  !AppProfile.current.isTv)),
       systemBarsVisible: systemBarsVisible,
     );
     if (_registry?.isClosing == true || _frame?.isClosing == true) {

@@ -13,7 +13,11 @@ const appDataLocalFields = {
   'disableSyncFields',
   'deviceId',
   'lastSyncTime',
+  ...appDataDeviceOnlyFields,
 };
+
+/// Device policies must not travel in portable backups or WebDAV uploads.
+const appDataDeviceOnlyFields = {'windowsWindowHotkey', 'tvLowMemoryMode'};
 
 const appDataOptionalArchiveFields = {'backupWebdav', 'backupWebdavPath'};
 

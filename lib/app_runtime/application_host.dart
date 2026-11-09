@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/application_update_service.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
+import 'package:venera_next/foundation/window_hotkey_controller.dart';
 
 import 'package:venera_next/features/sync/data_sync_controller.dart';
 import 'package:venera_next/features/comic_source/comic_source_api.dart';
@@ -19,6 +20,7 @@ class ApplicationHost {
     required this.core,
     required this.sync,
     this.placement,
+    this.windowHotkeys,
     this.sourceInstallations,
     SourceUpdateService? sourceUpdates,
     AppDataOperations? dataOperations,
@@ -35,6 +37,7 @@ class ApplicationHost {
   final CoreBootstrap core;
   final DataSyncController sync;
   final WindowPlacementHost? placement;
+  final WindowHotkeyHost? windowHotkeys;
   final SourceUpdateService sourceUpdates;
   final SourceInstallations? sourceInstallations;
   final ApplicationUpdateService applicationUpdates;

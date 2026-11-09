@@ -67,7 +67,7 @@ git diff --check
 
 CI 会使用 `flutter test --coverage` 生成 `coverage/lcov.info`，在工作流摘要中显示行覆盖率，并上传报告产物。当前覆盖率用于建立可见基线，尚未设置统一硬阈值；涉及关键业务路径的改动仍必须增加针对性测试。
 
-PR 还会运行 `依赖安全审查` 和 `PR 平台冒烟构建`。依赖审查会阻止引入高危或严重漏洞依赖；当改动涉及 Flutter 代码、原生平台目录、依赖、构建脚本或工作流时，平台工作流会执行 Android Debug 和 Windows Debug 构建，文档等不影响构建的改动会跳过这两个平台任务。Dart 格式检查只针对本次修改的 Dart 文件执行，避免历史格式差异阻塞后续贡献。`main` 分支要求 PR 通过代码分析、依赖审查和平台冒烟构建门禁，并禁止直接强推或删除分支。
+PR 还会运行 `依赖安全审查` 和 `PR 平台冒烟构建`。依赖审查会阻止引入高危或严重漏洞依赖；当改动涉及 Flutter 代码、原生平台目录、依赖、构建脚本或工作流时，平台工作流会执行 Android 手机版／TV 版 Debug 和 Windows Debug 构建，文档等不影响构建的改动会跳过这些平台任务。质量流程另运行真实 TV flavor 的导航、输入、低内存和更新回归。Dart 格式检查只针对本次修改的 Dart 文件执行，避免历史格式差异阻塞后续贡献。`main` 分支要求 PR 通过代码分析、依赖审查和平台冒烟构建门禁，并禁止直接强推或删除分支。
 
 涉及发布版本时再运行：
 
@@ -97,10 +97,11 @@ storeFile=../keystore.jks
 
 ```bash
 flutter pub get --enforce-lockfile
-flutter build apk --release
+flutter build apk --release --flavor mobile
+flutter build apk --release --flavor tv
 ```
 
-构建产物通常位于 `build/app/outputs/apk/release/`。
+构建产物分别位于 `build/app/outputs/apk/mobile/release/` 和 `build/app/outputs/apk/tv/release/`。Android 必须明确指定 `--flavor mobile` 或 `--flavor tv`；不设置全局 `default-flavor`，避免影响 iOS/macOS 的原有 Xcode scheme。GitHub Actions 开启 Android 时会同时构建两种。TV 的独立包名、版本码偏移、更新方式和发布校验见 [Android TV 分发说明](../distribution/android_tv.zh.md)。
 
 签名文件和密码属于敏感信息，不应提交到仓库。
 
@@ -153,7 +154,9 @@ Android release 工作流需要以下仓库 Secrets：
 
 发布后的 AltStore 更新会复用固定分支 `automation/update-altstore` 并创建 PR。仓库需要配置可向当前仓库推送分支并创建 PR 的 `ALTSTORE_PR_TOKEN`；未单独配置时会复用 `WINGET_PKGS_TOKEN`。令牌缺失或 PR 创建失败会使任务明确失败，不再产生只有分支、没有 PR 的成功记录。
 
-AI Issue 检查默认关闭。仅在确认 `API_URL`、`API_KEY` 可用后，将仓库变量 `ENABLE_AI_ISSUE_CHECK` 设为 `true`；可通过 `ISSUE_CHECK_MODEL` 覆盖默认模型。该流程只发表评论和关闭建议，不会自动关闭 Issue。
+Issue 分类与格式检查默认运行，不需要 AI API：`.github/scripts/issue_policy.py` 校验新表单、按类型要求诊断并维护分类／补充信息标签。新建、编辑、重新打开及评论变化会复查，同一提示评论更新；机器人事件、PR、已关闭和旧格式报告跳过。首次需要时自动创建分类标签，保留已有同名标签的颜色和说明。用户采集步骤见[Issue 提交说明](../user/issue_reporting.zh.md)。
+
+可选 AI 摘要默认关闭，仅对格式检查通过的新建／编辑报告运行。确认 `API_URL`、`API_KEY` 可用后，将仓库变量 `ENABLE_AI_ISSUE_CHECK` 设为 `true`；`ISSUE_CHECK_MODEL` 可覆盖模型。格式和 AI 各自按 Issue 串行更新，机器人事件在作业入口跳过，不占用用户事件的待运行位置；AI 耗时不阻塞后续格式复查。AI 更新单独标记的评论，读取已有正文及报告者／维护者补充，失败不影响固定规则；只给维护者建议，不自动关闭。Issue 正文不插入 shell 命令，附件不由自动检查下载。
 
 不要把 Secrets、签名文件或实际密码写入代码、日志和文档示例。
 

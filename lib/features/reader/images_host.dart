@@ -1,3 +1,4 @@
+import 'reader_image_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/loading.dart';
 import 'images.dart';
@@ -8,6 +9,7 @@ import 'package:venera_next/features/reader/reader_controller.dart';
 import 'package:venera_next/features/comic_source/comic_source.dart';
 import 'package:venera_next/features/reader/chapter_comments.dart';
 import 'package:venera_next/foundation/appdata.dart';
+import 'package:venera_next/foundation/tv_reader_policy.dart';
 import 'image_read.dart';
 
 import 'gallery_view.dart';
@@ -29,6 +31,7 @@ class ReaderImagesHost extends StatelessWidget {
     listenable: Listenable.merge([
       ComicSourceManager.current,
       reader.imageRefreshChanges,
+      reader.resourceBudget,
     ]),
     builder: (context, _) => _buildImages(context),
   );
@@ -141,7 +144,12 @@ class ReaderImagesHost extends StatelessWidget {
           commentsAtEnd: reader.totalPages > reader.maxPage,
           firstChapter: reader.isFirstChapterOfGroup,
           lastChapter: reader.isLastChapterOfGroup,
-          preloadCount: appdata.settings.globalReaderSettings.preloadImageCount,
+          preloadCount: reader.resourceBudget.preloadCount(
+            appdata.settings.globalReaderSettings.preloadImageCount,
+          ),
+          decodePixelBudget: appdata.settings.tvLowMemoryEnabled
+              ? TvReaderPolicy.decodePixels
+              : null,
           doubleTapCollect:
               appdata.settings.globalReaderSettings.quickCollectImage ==
               'DoubleTap',
@@ -150,7 +158,9 @@ class ReaderImagesHost extends StatelessWidget {
           sourceKey: source?.key,
           comicId: reader.cid,
           chapterId: reader.eid,
+          crop: ReaderImageTools.crop(reader.cid, reader.type.comicSource?.key),
           imageRefreshRevision: reader.imageRefreshRevision,
+          imageRevisions: reader.imageRevisions,
           showImageDimensions: preferences.showImageDimensions,
           observeImageReadiness: preferences.autoReadingSkipUnavailableImages,
         ),
@@ -191,7 +201,12 @@ class ReaderImagesHost extends StatelessWidget {
           firstChapter: reader.isFirstChapterOfGroup,
           lastChapter: reader.isLastChapterOfGroup,
           maxChapter: reader.maxChapter,
-          preloadCount: appdata.settings.globalReaderSettings.preloadImageCount,
+          preloadCount: reader.resourceBudget.preloadCount(
+            appdata.settings.globalReaderSettings.preloadImageCount,
+          ),
+          decodePixelBudget: appdata.settings.tvLowMemoryEnabled
+              ? TvReaderPolicy.decodePixels
+              : null,
           splitWideImages: preferences.splitDualPage == true,
           invertSplit: preferences.splitDualPageInvert == true,
           scrollSpeed: preferences.readerScrollSpeed,
@@ -204,7 +219,9 @@ class ReaderImagesHost extends StatelessWidget {
           centerLongPressZoom: preferences.longPressZoomPosition == 'center',
           sourceKey: reader.type.comicSource?.key,
           comicId: reader.cid,
+          crop: ReaderImageTools.crop(reader.cid, reader.type.comicSource?.key),
           imageRefreshRevision: reader.imageRefreshRevision,
+          imageRevisions: reader.imageRevisions,
         ),
         navigation: reader.controller,
         loadChapter: chapters.load,

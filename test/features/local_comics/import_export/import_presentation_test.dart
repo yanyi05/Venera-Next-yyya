@@ -294,6 +294,66 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final importedCount in [0, 1]) {
+    testWidgets(
+      'archive failures name the file and report counts; imported=$importedCount',
+      (tester) async {
+        final root = Directory.systemTemp.createTempSync(
+          'archive-result-view-',
+        );
+        final task = await host(tester);
+        final messages = <String>[];
+        registerShowMessageHandler((context, message) => messages.add(message));
+        const channel = MethodChannel('plugins.flutter.io/file_selector');
+        final messenger = tester.binding.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(channel, (_) async => root.path);
+        final failure = FormatException('Invalid archive data');
+        final service = _ArchiveResultService(
+          ComicImportResult(
+            succeeded: importedCount > 0,
+            importedCount: importedCount,
+            issues: [
+              ComicImportIssue.archive(
+                'Broken.zip',
+                failure,
+                StackTrace.current,
+              ),
+            ],
+          ),
+        );
+        try {
+          final result = await tester.runAsync(
+            () => task.run(
+              (operation) => ImportComic(
+                service: service,
+                presentation: ImportComicPresentation.forTask(task),
+              ).multipleCbz(operation),
+            ),
+          );
+          expect(result, importedCount > 0);
+          await tester.pumpAndSettle();
+          expect(messages, [
+            'Failed to import @name: @error'.tlParams({
+              'name': 'Broken.zip',
+              'error': failure.toString(),
+            }),
+            'Success: @a, Failed: @b'.tlParams({'a': importedCount, 'b': 1}),
+          ]);
+          expect(
+            messages,
+            isNot(contains('Imported @a comics'.tlParams({'a': 0}))),
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          registerShowMessageHandler((context, message) {});
+          messenger.setMockMethodCallHandler(channel, null);
+          await tester.pumpWidget(const SizedBox());
+          root.deleteSync(recursive: true);
+        }
+      },
+    );
+  }
+
   for (final visible in [false, true]) {
     testWidgets(
       'PDF view finishes without cancelling app task; visible=$visible',
@@ -347,6 +407,20 @@ void main() {
       },
     );
   }
+}
+
+class _ArchiveResultService extends ComicImportService {
+  const _ArchiveResultService(this.result)
+    : super(
+        localManager: LocalManager.new,
+        favoritesManager: _favoritesForView,
+      );
+  final ComicImportResult result;
+  @override
+  Future<ComicImportResult> archives(
+    Directory directory, {
+    String? folder,
+  }) async => result;
 }
 
 LocalFavoritesManager? _favoritesOwner;

@@ -3,6 +3,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/network/request_scope.dart';
 
 void main() {
+  test('cancellation aliases stay with their cancelled request ancestry', () {
+    final parent = RequestScope();
+    final child = RequestScope(parent: parent);
+    final unrelated = RequestScope();
+    final reason = TimeoutException('request deadline');
+    const alias = 'serialized HTTP cancellation';
+    child.recordCancellationAlias(alias);
+    expect(child.normalizeCancellation(alias), alias);
+    parent.cancel(reason);
+    child.recordCancellationAlias(alias);
+    expect(parent.normalizeCancellation(alias), same(reason));
+    expect(child.normalizeCancellation(alias), same(reason));
+    expect(parent.normalizeCancellation('other failure'), 'other failure');
+    final typed = StateError(alias);
+    expect(parent.normalizeCancellation(typed), same(typed));
+    unrelated.cancel();
+    expect(unrelated.normalizeCancellation(alias), alias);
+    child.dispose();
+    expect(child.normalizeCancellation(alias), same(reason));
+    expect(parent.normalizeCancellation(alias), same(reason));
+    parent.dispose();
+    unrelated.dispose();
+  });
+
   test('cancel reaches child HTTP token and suppresses late results', () async {
     final parent = RequestScope();
     final child = RequestScope(parent: parent);

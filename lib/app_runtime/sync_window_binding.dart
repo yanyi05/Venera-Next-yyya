@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:venera_next/components/window_frame.dart';
 import 'package:venera_next/features/sync/data_sync_controller.dart';
@@ -20,6 +22,7 @@ class SyncWindowBinding extends StatefulWidget {
     this.prepareImports,
     this.cancelStartupUpdates,
     this.closeStartupUpdates,
+    this.holdWindowHotkey,
     super.key,
   });
   final Future<VoidCallback> Function()? prepareInteractive;
@@ -30,6 +33,7 @@ class SyncWindowBinding extends StatefulWidget {
   final Future<VoidCallback> Function()? prepareImports;
   final VoidCallback? cancelStartupUpdates;
   final Future<void> Function()? closeStartupUpdates;
+  final Future<VoidCallback> Function()? holdWindowHotkey;
   final Widget child;
   final DataSyncController controller;
   final Future<void> Function() waitForHistoryWrites;
@@ -49,6 +53,7 @@ class _SyncWindowBindingState extends State<SyncWindowBinding> {
   VoidCallback? _releaseImages;
   VoidCallback? _releaseImports;
   bool _preparing = false;
+  Future<VoidCallback>? _windowHotkeyHold;
 
   @override
   void didChangeDependencies() {
@@ -57,15 +62,23 @@ class _SyncWindowBindingState extends State<SyncWindowBinding> {
     if (identical(window, _window)) return;
     _window?.removeExitTask(_waitThenClose);
     _window?.removeCloseFailureListener(_releasePreparedWork);
-    _window?.removeCloseStartListener(_cancelStartupUpdates);
+    _window?.removeCloseStartListener(_beginClose);
     _window = window;
     window.addExitTask(_waitThenClose);
     window.addCloseFailureListener(_releasePreparedWork);
-    window.addCloseStartListener(_cancelStartupUpdates);
-    if (window.isClosing) _cancelStartupUpdates();
+    window.addCloseStartListener(_beginClose);
+    if (window.isClosing) _beginClose();
   }
 
-  void _cancelStartupUpdates() => widget.cancelStartupUpdates?.call();
+  void _beginClose() {
+    final hold = widget.holdWindowHotkey;
+    if (_windowHotkeyHold == null && hold != null) {
+      // Suspend native dispatch before the frame waits for accepted saves.
+      final held = _windowHotkeyHold = hold();
+      _window!.trackExitTask(held.then<void>((_) {}));
+    }
+    widget.cancelStartupUpdates?.call();
+  }
 
   Future<void> _waitThenClose() async {
     final controller = widget.controller;
@@ -114,6 +127,16 @@ class _SyncWindowBindingState extends State<SyncWindowBinding> {
 
   void _releasePreparedWork() {
     if (widget.isFinalizing?.call() == true) return;
+    final windowHotkey = _windowHotkeyHold;
+    _windowHotkeyHold = null;
+    if (windowHotkey != null) {
+      unawaited(
+        windowHotkey.then<void>(
+          (release) => release(),
+          onError: (Object _, StackTrace _) {},
+        ),
+      );
+    }
     final sync = _releaseSync;
     _releaseSync = null;
     final images = _releaseImages;
@@ -157,7 +180,7 @@ class _SyncWindowBindingState extends State<SyncWindowBinding> {
 
   @override
   void dispose() {
-    _window?.removeCloseStartListener(_cancelStartupUpdates);
+    _window?.removeCloseStartListener(_beginClose);
     _window?.removeExitTask(_waitThenClose);
     _window?.removeCloseFailureListener(_releasePreparedWork);
     try {

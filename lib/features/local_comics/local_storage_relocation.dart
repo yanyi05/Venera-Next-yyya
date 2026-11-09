@@ -143,6 +143,7 @@ class LocalStorageRelocation {
         comicType: original.comicType,
         downloadedChapters: original.downloadedChapters,
         createdAt: original.createdAt,
+        incompleteChapters: original.incompleteChapters,
       );
       cleanups.add({
         'id': original.id,
@@ -245,6 +246,14 @@ bool _validPath(Object? value) =>
 bool _absolutePath(Object? value) {
   if (!_validPath(value)) return false;
   final path = value as String;
+  // flutter_saf uses document IDs, not URI authorities. A picker result such as
+  // android://primary:Comics is absolute in that provider's namespace.
+  if (path.startsWith('android://')) {
+    return path
+        .substring('android://'.length)
+        .split(RegExp(r'[/\\]'))
+        .every((part) => part.isNotEmpty && part != '.' && part != '..');
+  }
   final uri = Uri.tryParse(path);
   return p.isAbsolute(path) ||
       (uri?.scheme == 'content' && uri!.host.isNotEmpty && uri.path.isNotEmpty);

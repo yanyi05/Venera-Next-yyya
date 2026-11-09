@@ -163,15 +163,21 @@ class PhotoViewController
 
   @override
   void reset() {
-    if (getInitialScale?.call() != null) {
+    onReset?.call();
+    final scale = getInitialScale?.call();
+    if (scale != null) {
       initial = PhotoViewControllerValue(
           position: initial.position,
-          scale: getInitialScale!.call(),
+          scale: scale,
           rotation: initial.rotation,
           rotationFocusPoint: initial.rotationFocusPoint);
     }
+    prevValue = value;
     value = initial;
   }
+
+  /// Internal hook to retire the mounted view's animations and gestures.
+  VoidCallback? onReset;
 
   void resetWithNewBoxFit(BoxFit fit) {
     initial = PhotoViewControllerValue(

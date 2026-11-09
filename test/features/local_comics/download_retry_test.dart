@@ -8,6 +8,43 @@ import 'package:venera_next/features/local_comics/download_retry.dart';
 import 'package:venera_next/foundation/operation_failure.dart';
 
 void main() {
+  test(
+    'skip policy excludes authentication, TLS, cancellation and local storage',
+    () {
+      for (final status in [401, 403, 404, 410, 429, 500]) {
+        final request = RequestOptions(path: '/page');
+        expect(
+          canSkipUnavailableDownloadImage(
+            DioException.badResponse(
+              statusCode: status,
+              requestOptions: request,
+              response: Response(requestOptions: request, statusCode: status),
+            ),
+          ),
+          status == 404 || status == 410,
+        );
+      }
+      for (final error in <Object>[
+        const FileSystemException('disk full'),
+        const HandshakeException('bad certificate'),
+        OperationFailure.message('cancel', kind: FailureKind.cancelled),
+        StateError('script defect'),
+      ]) {
+        expect(canSkipUnavailableDownloadImage(error), isFalse);
+      }
+      expect(
+        canSkipUnavailableDownloadImage(const SocketException('offline')),
+        isTrue,
+      );
+      expect(
+        canSkipUnavailableDownloadImage(
+          OperationFailure.message('bad image', kind: FailureKind.unsupported),
+        ),
+        isTrue,
+      );
+    },
+  );
+
   testWidgets('connection backoff is bounded and follows increasing delays', (
     tester,
   ) async {

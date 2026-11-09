@@ -16,6 +16,8 @@ import 'package:venera_next/foundation/res.dart';
 import 'package:venera_next/foundation/window_placement.dart';
 import 'package:venera_next/foundation/window_placement_tracker.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:venera_next/foundation/window_hotkey_controller.dart';
+import '../support/window_hotkey_fixture.dart';
 
 void main() {
   late SyncTestFixture fixture;
@@ -36,6 +38,70 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('window_manager'), null);
   });
+
+  testWidgets(
+    'close freezes global hotkeys before pending saves drain and a failed exit resumes them',
+    (tester) async {
+      final native = FakeWindowHotkeyBackend();
+      final saving = Completer<void>();
+      final hotkeys = WindowHotkeyController(
+        backend: native,
+        load: () => firstHotkeyConfig,
+        persist: (_, _) => saving.future,
+      );
+      await hotkeys.start();
+      var exits = 0;
+      var attempts = 0;
+      final failure = StateError('test exit preparation');
+      Future<VoidCallback> prepare() async => () {};
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (_, child) => WindowFrame(
+            SyncWindowBinding(
+              controller: fixture.controller,
+              waitForHistoryWrites: () async {},
+              holdWindowHotkey: hotkeys.hold,
+              prepareInteractive: hotkeys.hold,
+              prepareFollowUpdates: () async {
+                if (++attempts == 1) throw failure;
+                return () {};
+              },
+              prepareWebDavLibrary: prepare,
+              prepareImports: prepare,
+              prepareDownloads: prepare,
+              prepareImages: prepare,
+              child: child!,
+            ),
+            onExit: () => exits++,
+          ),
+          home: const Scaffold(),
+        ),
+      );
+      final saved = hotkeys.configure(secondHotkeyConfig);
+      await tester.pump();
+      void close() => (tester.state(find.byType(WindowFrame)) as WindowListener)
+          .onWindowClose();
+      close();
+      expect(native.suspended, isTrue);
+      await tester.pump();
+      expect(attempts, 0);
+      expect(exits, 0);
+      saving.complete();
+      await tester.pump();
+      await saved;
+      await tester.pump();
+      expect(tester.takeException(), same(failure));
+      expect(native.suspended, isFalse);
+      expect(native.current, secondHotkey);
+      expect(exits, 0);
+      close();
+      await tester.pump();
+      expect(exits, 1);
+      expect(native.suspended, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      await hotkeys.close();
+    },
+  );
 
   testWidgets('detaching during final close does not reopen prepared owners', (
     tester,

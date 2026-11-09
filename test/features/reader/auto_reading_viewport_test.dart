@@ -300,6 +300,30 @@ void main() {
             reader.autoReading.start();
             await tester.pump();
             expect(screenAwake, isTrue);
+            final hiddenChapter = reader.chapter;
+            final hiddenPage = reader.page;
+            final hiddenOffset = mode.isGallery
+                ? null
+                : (reader.imageViewController as ContinuousModeState)
+                      .scrollController
+                      .offset;
+            reader.didChangeAppLifecycleState(AppLifecycleState.hidden);
+            await pumpFrames(25);
+            expect(screenAwake, isFalse);
+            expect(reader.chapter, hiddenChapter);
+            expect(reader.page, hiddenPage);
+            if (hiddenOffset != null) {
+              expect(
+                (reader.imageViewController as ContinuousModeState)
+                    .scrollController
+                    .offset,
+                hiddenOffset,
+              );
+            }
+            expect(reader.autoReading.isActive, isTrue);
+            reader.didChangeAppLifecycleState(AppLifecycleState.resumed);
+            await tester.pump();
+            expect(screenAwake, isTrue);
             reader.didChangeAppLifecycleState(AppLifecycleState.paused);
             await tester.pump();
             expect(screenAwake, isFalse);
@@ -319,6 +343,34 @@ void main() {
               final start = flow.scrollController.offset;
               await pumpFrames(25);
               expect(flow.scrollController.offset - start, closeTo(50, 3));
+              flow.photoViewController.updateMultiple(
+                scale: 2.0,
+                position: Offset.zero,
+              );
+              flow.onScaleUpdate();
+              final zoomedStart = flow.scrollController.offset;
+              await pumpFrames(25);
+              expect(flow.autoReadingReady, isTrue);
+              expect(
+                flow.scrollController.offset - zoomedStart,
+                closeTo(25, 3),
+                reason: 'Zoom must preserve screen-space reading speed.',
+              );
+              final firstTouch = await tester.startGesture(
+                const Offset(350, 250),
+                pointer: 1,
+              );
+              final secondTouch = await tester.startGesture(
+                const Offset(450, 250),
+                pointer: 2,
+              );
+              final heldOffset = flow.scrollController.offset;
+              await pumpFrames(20);
+              expect(flow.scrollController.offset, heldOffset);
+              expect(flow.autoReadingReady, isFalse);
+              await secondTouch.up();
+              await firstTouch.up();
+              await pumpFrames(5);
               // There is only one tall/wide image: page == maxPage must not stop scrolling.
               expect(reader.chapter, 1);
               expect(reader.autoReading.isActive, isTrue);
@@ -328,7 +380,12 @@ void main() {
               await pumpFrames(10);
             }
             expect(reader.chapter, 1);
-            expect(reader.autoReading.status, AutoReadingStatus.stopped);
+            expect(
+              reader.autoReading.status,
+              AutoReadingStatus.stopped,
+              reason:
+                  'Reading must reach the visible chapter end, including the zoomed tail.',
+            );
             settings['autoReadingAcrossChapters'] = true;
             reader.autoReading.toggle();
             for (var i = 0; i < 60 && reader.autoReading.isActive; i++) {

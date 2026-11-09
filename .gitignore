@@ -49,3 +49,7 @@ app.*.map.json
 .opencode/
 .codex/
 .agents/
+
+# Task diagnostics and temporary validation fixtures.
+/logs/*
+!/logs/README.md

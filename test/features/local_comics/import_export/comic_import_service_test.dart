@@ -810,10 +810,39 @@ void main() {
       expect(result.succeeded, isTrue);
       expect(result.importedCount, 1);
       expect(result.issues.single.kind, ComicImportIssueKind.archiveFailed);
+      expect(result.issues.single.sourceName, 'Broken.cbz');
       expect(result.issues.single.error, isNotNull);
       expect(result.issues.single.stackTrace, isNotNull);
       expect(manager.findByName('Good'), isNotNull);
       expect(manager.findByName('Broken'), isNull);
     },
   );
+
+  for (final hasBrokenArchive in [false, true]) {
+    test(
+      'archive batch with no successful imports is not a success; broken=$hasBrokenArchive',
+      () async {
+        final source = Directory(path.join(root.path, 'archives'))
+          ..createSync();
+        if (hasBrokenArchive) {
+          File(
+            path.join(source.path, 'Broken.zip'),
+          ).writeAsStringSync('invalid archive');
+        }
+        final result = await service.archives(source);
+        expect(result.succeeded, isFalse);
+        expect(result.importedCount, 0);
+        expect(
+          result.issues.map((issue) => issue.kind),
+          contains(ComicImportIssueKind.noValidComics),
+        );
+        expect(manager.count, 0);
+        if (hasBrokenArchive) {
+          final failure = result.issues.first;
+          expect(failure.sourceName, 'Broken.zip');
+          expect(failure.error, isNotNull);
+        }
+      },
+    );
+  }
 }

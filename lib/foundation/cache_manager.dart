@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'cache_storage_snapshot.dart';
 import 'cache_scan.dart';
 import 'log.dart';
 
@@ -124,10 +126,28 @@ class CacheManager {
     return _enqueue(() => _writeCache(key, bytes, duration));
   }
 
+  Future<void> writeComicCache(
+    String key,
+    List<int> data, {
+    required String? sourceKey,
+    required String comicId,
+  }) {
+    final bytes = List<int>.of(data);
+    return _enqueue(
+      () => _writeCache(
+        key,
+        bytes,
+        7 * 24 * 60 * 60 * 1000,
+        jsonEncode([sourceKey ?? 'local', comicId]),
+      ),
+    );
+  }
+
   Future<void> _writeCache(
     String key,
     List<int> data, [
     int duration = 7 * 24 * 60 * 60 * 1000,
+    String? group,
   ]) async {
     await _delete(key);
     _directoryIndex = (_directoryIndex + 1) % 100;
@@ -139,9 +159,9 @@ class CacheManager {
     var expires = DateTime.now().millisecondsSinceEpoch + duration;
     _db.execute(
       '''
-      INSERT OR REPLACE INTO cache (key, dir, name, expires) VALUES (?, ?, ?, ?)
+      INSERT OR REPLACE INTO cache (key, dir, name, expires, type) VALUES (?, ?, ?, ?, ?)
     ''',
-      [key, dir.toString(), name, expires],
+      [key, dir.toString(), name, expires, group],
     );
     _currentSize += data.length;
     if (_currentSize > _limitSize) await _checkCache();
@@ -319,15 +339,66 @@ class CacheManager {
     _currentSize -= fileSize;
   }
 
+  Future<CacheStorageSnapshot> storageSnapshot() => _enqueue(() async {
+    final entries = <CacheStorageEntry>[];
+    for (final row in _db.select('SELECT * FROM cache')) {
+      final directory = row['dir'] as String, name = row['name'] as String;
+      if (!RegExp(r'^\d{1,2}$').hasMatch(directory) ||
+          !RegExp(r'^[0-9a-f]{32}$').hasMatch(name)) {
+        continue;
+      }
+      final file = File('$_cachePath/$directory/$name');
+      if (!await file.exists()) continue;
+      entries.add(
+        CacheStorageEntry(
+          key: row['key'] as String,
+          directory: directory,
+          name: name,
+          expires: row['expires'] as int,
+          bytes: await file.length(),
+          group: row['type'] as String? ?? 'other',
+        ),
+      );
+    }
+    return CacheStorageSnapshot(entries);
+  });
+
+  /// Only delete the version shown in the confirmation, never a newer cache write.
+  Future<int> clearSnapshot(
+    CacheStorageSnapshot snapshot,
+    Set<String> groups, {
+    DateTime? keepSince,
+  }) {
+    final selected = List.of(
+      snapshot.eligible(Set.of(groups), keepSince: keepSince),
+    );
+    return _enqueue(() async {
+      var released = 0;
+      for (final entry in selected) {
+        final current = _db.select('SELECT * FROM cache WHERE key = ?', [
+          entry.key,
+        ]);
+        if (current.isEmpty) continue;
+        final row = current.single;
+        if (row['dir'] != entry.directory ||
+            row['name'] != entry.name ||
+            row['expires'] != entry.expires) {
+          continue;
+        }
+        final before = _currentSize;
+        await _delete(entry.key);
+        released += before - _currentSize;
+      }
+      return released;
+    });
+  }
+
   /// Delete all cache.
   Future<void> clear() => _enqueue(_clear);
-
   Future<void> _clear() async {
     await Directory(_cachePath).delete(recursive: true);
     Directory(_cachePath).createSync(recursive: true);
-    _db.execute('''
-      DELETE FROM cache
-    ''');
+    _db.execute('DELETE FROM cache');
     _currentSize = 0;
   }
 }

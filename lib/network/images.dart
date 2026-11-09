@@ -453,7 +453,12 @@ abstract class ImageDownloader {
             }
 
             scope?.check();
-            await CacheManager().writeCache(cacheKey, data);
+            await CacheManager().writeComicCache(
+              cacheKey,
+              data,
+              sourceKey: sourceKey,
+              comicId: cid,
+            );
             scope?.check();
             yield ImageDownloadProgress(
               currentBytes: data.length,

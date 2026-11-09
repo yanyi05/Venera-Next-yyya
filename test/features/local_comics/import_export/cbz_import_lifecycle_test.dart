@@ -4,6 +4,9 @@ import 'dart:async';
 import 'package:archive/archive_io.dart' as archive;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/local_comics/import_export/cbz.dart';
+import 'package:venera_next/features/local_comics/import_export/comic_import_service.dart';
+import 'package:venera_next/features/favorites/favorites_manager.dart';
+import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/features/local_comics/local_storage_guard.dart';
 import 'package:venera_next/foundation/app.dart';
@@ -50,6 +53,51 @@ void main() {
     }
     return File('${root.path}/$name.cbz')
       ..writeAsBytesSync(archive.ZipEncoder().encodeBytes(contents));
+  }
+
+  for (final name in [
+    '[Sample Artist \u2013 V.24 black and white part01 (53p).zip].zip',
+    'Sample24.zip',
+    '[Sample Artist .25 in the camping car part02 (51p).zip].zip',
+  ]) {
+    test(
+      'archive display name $name stays visible and readable after reopening',
+      () async {
+        final contents = archive.Archive();
+        for (final page in ['2.jpg', '1.jpg']) {
+          final bytes = utf8.encode(page);
+          contents.addFile(archive.ArchiveFile(page, bytes.length, bytes));
+        }
+        final input = File('${root.path}/$name')
+          ..writeAsBytesSync(archive.ZipEncoder().encodeBytes(contents));
+        final service = ComicImportService(
+          localManager: () => manager,
+          favoritesManager: LocalFavoritesManager.new,
+        );
+        await CBZ.import(input, registerComic: service.registerComic);
+        final title = name.substring(0, name.lastIndexOf('.'));
+        Future<void> readable() async {
+          final saved = manager.getComics(LocalSortType.name).single;
+          expect(saved.title, title);
+          expect(manager.findByName(title), isNotNull);
+          expect(saved.coverFile.readAsStringSync(), '1.jpg');
+          final images = await manager.getImages(saved.id, ComicType.local, 1);
+          expect(images, hasLength(2));
+          expect(
+            File(images.first.replaceFirst('file://', '')).readAsStringSync(),
+            '1.jpg',
+          );
+        }
+
+        await readable();
+        await manager.pendingDownloadTaskWrites;
+        manager.dispose();
+        manager = LocalManager(initializeSources: () async {});
+        await manager.init();
+        await readable();
+        expect(input.existsSync(), isTrue);
+      },
+    );
   }
 
   test(
@@ -133,19 +181,29 @@ void main() {
     'backup restore reports a failed acknowledgement without deleting saved pages',
     () async {
       final error = StateError('restore acknowledgement failed');
+      var registrations = 0;
       final backup = ComicBackupManager(
         operations: _ArchiveDownloadOps(book('Restored')),
         readConfig: _backupConfig,
         registerImportedComic: (comic) async {
+          registrations++;
           await manager.add(comic, comic.id);
           throw error;
         },
       );
-      final result = await backup.restore([
+      final batch = backup.createRestoreBatch([
         BackupFile(name: 'Restored.cbz', size: 1, modified: DateTime(2024)),
       ]);
+      addTearDown(batch.dispose);
+      await batch.run();
+      final result = BackupResult.fromBatch(batch);
       expect(result.success, 0);
       expect(result.failed, 1);
+      expect(batch.items.single.canRetry, isFalse);
+      await batch.run(retryFailed: true);
+      await batch.run();
+      expect(registrations, 1);
+      expect(manager.getComics(LocalSortType.name), hasLength(1));
       expect(
         result.failures.single.error,
         isA<PersistenceFailure>()

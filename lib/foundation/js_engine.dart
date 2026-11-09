@@ -855,6 +855,10 @@ class JsEngine with _JSEngineApi, Init {
       );
     } catch (e) {
       error = e.toString();
+      if (e is RequestCancelled ||
+          (e is DioException && CancelToken.isCancel(e))) {
+        scope.recordCancellationAlias(error);
+      }
     } finally {
       if (temporaryClient != null &&
           _temporaryClients.remove(temporaryClient)) {
@@ -1035,6 +1039,7 @@ class JsEngine with _JSEngineApi, Init {
     FlutterQjs? nativeEngine,
   ) {
     if (result is! Future) return _ownResult(result, pending, nativeEngine);
+    final scope = RequestScope.current;
     final completion = Completer<dynamic>();
     pending.add(completion);
     unawaited(completion.future.then<void>((_) {}, onError: (Object _) {}));
@@ -1063,7 +1068,11 @@ class JsEngine with _JSEngineApi, Init {
         if (failureStack == null) {
           completion.complete(owned);
         } else {
-          completion.completeError(owned as Object, failureStack);
+          final error = owned as Object;
+          completion.completeError(
+            scope?.normalizeCancellation(error) ?? error,
+            failureStack,
+          );
         }
       } catch (error, stack) {
         completion.completeError(error, stack);
@@ -1517,6 +1526,7 @@ class _JsCallbackInvocation {
   final JsEngine owner;
   final FlutterQjs? nativeEngine;
   final void Function(dynamic result) consume;
+  final _requestScope = RequestScope.current;
   final _completion = Completer<void>();
   final cleanupFailures =
       <({String resource, Object error, StackTrace stack})>[];
@@ -1584,7 +1594,10 @@ class _JsCallbackInvocation {
         }
       }
       if (rejectionStack != null) {
-        Error.throwWithStackTrace(borrowed!, rejectionStack);
+        Error.throwWithStackTrace(
+          _requestScope?.normalizeCancellation(borrowed!) ?? borrowed!,
+          rejectionStack,
+        );
       }
       if (!owner._ownsRuntime(nativeEngine)) {
         throw JsDisposedError('JavaScript callback runtime is closed');

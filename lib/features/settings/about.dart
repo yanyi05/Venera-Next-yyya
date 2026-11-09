@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/application_distribution.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:venera_next/foundation/application_preferences.dart';
@@ -9,6 +10,7 @@ import 'package:venera_next/components/scroll.dart';
 import 'package:venera_next/features/settings/setting_components.dart';
 import 'package:venera_next/features/settings/sponsors.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/app_profile.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
@@ -87,7 +89,11 @@ class _AboutSettingsState extends State<AboutSettings> {
         Column(
           children: [
             const SizedBox(height: 8),
-            Text("V${App.version}", style: const TextStyle(fontSize: 16)),
+            Text(
+              'V${AppProfile.current.displayVersion(App.version)}',
+              style: const TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
             Text(
               "VeneraNext is a free and open-source app for comic reading.".tl,
             ),
@@ -110,6 +116,19 @@ class _AboutSettingsState extends State<AboutSettings> {
           ),
         ).toSliver(),
         ListTile(
+          title: const Text('yyya 分支更新'),
+          subtitle: const Text('当前应用使用 yyya 分支的安装包，保留自定义功能。'),
+          trailing: const Icon(Icons.open_in_new),
+          onTap: () => launchUrlString(ApplicationDistribution.releasesUrl),
+        ).toSliver(),
+        ListTile(
+          title: const Text('查看原作者更新'),
+          subtitle: const Text('原版安装包不包含本分支的自定义功能。'),
+          trailing: const Icon(Icons.open_in_new),
+          onTap: () =>
+              launchUrlString(ApplicationDistribution.upstreamReleasesUrl),
+        ).toSliver(),
+        ListTile(
           title: Text("Changelog".tl),
           trailing: const Icon(Icons.keyboard_arrow_right),
           onTap: () {
@@ -120,6 +139,15 @@ class _AboutSettingsState extends State<AboutSettings> {
           title: "Check for updates on startup".tl,
           preference: AppPreferences.checkUpdateOnStart,
         ).toSliver(),
+        if (AppProfile.current.isTv)
+          ListTile(
+            leading: const Icon(Icons.tv),
+            title: const Text('Android TV'),
+            subtitle: Text(
+              'TV updates are published alongside mobile releases. Choose an android-tv APK; mobile and TV apps keep separate data.'
+                  .tl,
+            ),
+          ).toSliver(),
         ListTile(
           title: const Text("Github"),
           trailing: const Icon(Icons.open_in_new),

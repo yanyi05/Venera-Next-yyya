@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/components/application_update_prompt.dart';
+import 'package:venera_next/components/tv_navigation.dart';
 import 'package:venera_next/components/window_frame.dart';
 import 'package:venera_next/features/settings/about.dart';
 import 'package:venera_next/foundation/app.dart';
@@ -49,13 +50,17 @@ void main() {
 
   void testUpdateWidgets(
     String name,
-    Future<void> Function(WidgetTester) body,
-  ) {
+    Future<void> Function(WidgetTester) body, {
+    bool forAndroidTv = false,
+    bool forHarmonyOS = false,
+  }) {
     testWidgets(name, (tester) async {
       adapter = ApplicationUpdateAdapter();
       service = ApplicationUpdateService(
         createClient: () => Dio()..httpClientAdapter = adapter,
         currentVersion: () => '1.0.0',
+        forAndroidTv: forAndroidTv,
+        forHarmonyOS: forHarmonyOS,
       );
       try {
         await body(tester);
@@ -97,7 +102,10 @@ void main() {
       ).copyWith(textScaler: TextScaler.linear(textScale)),
       child: ApplicationUpdateScope(
         service: service,
-        child: WindowFrame(child!, onExit: onExit ?? () {}),
+        child: TvNavigation(
+          enabled: service.forAndroidTv,
+          child: WindowFrame(child!, onExit: onExit ?? () {}),
+        ),
       ),
     ),
     home: Scaffold(body: child),
@@ -106,6 +114,90 @@ void main() {
   void closeWindow(WidgetTester tester) =>
       (tester.state(find.byType(WindowFrame)) as WindowListener)
           .onWindowClose();
+
+  for (final brightness in Brightness.values) {
+    for (final size in [const Size(375, 812), const Size(812, 375)]) {
+      testUpdateWidgets(
+        'HarmonyOS update uses the release page and explains same-key signing; $brightness $size',
+        (tester) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          await tester.pumpWidget(
+            app(const AboutSettings(), brightness: brightness, textScale: 1.8),
+          );
+          final check = find.widgetWithText(FilledButton, 'Check');
+          await tester.scrollUntilVisible(
+            check,
+            120,
+            scrollable: find.descendant(
+              of: find.byType(AboutSettings),
+              matching: find.byType(Scrollable),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(check.hitTestable(), findsOneWidget);
+          await tester.tap(check);
+          await waitFor(tester, () => adapter.entered.isCompleted);
+          adapter.complete({
+            'tag_name': 'v2.0.0',
+            'assets': [
+              for (final name in [
+                'VeneraNext-2.0.0-harmonyos-arm64-unsigned.hap',
+                'harmonyos-manifest.json',
+              ])
+                {'name': name, 'state': 'uploaded', 'size': 20},
+            ],
+          });
+          adapter.released.complete();
+          await tester.pumpAndSettle();
+          const notice =
+              'HarmonyOS beta 2.0.0 is available. Open the release page, choose the unsigned HAP, and sign it with your existing key to upgrade.';
+          final content = find.text(notice);
+          expect(content, findsOneWidget);
+          final scroll = find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(SingleChildScrollView),
+          );
+          expect(scroll, findsOneWidget);
+          await tester.drag(scroll, const Offset(0, -1000));
+          await tester.pumpAndSettle();
+          final paragraph = tester.renderObject<RenderParagraph>(content);
+          expect(
+            paragraph.size.height,
+            moreOrLessEquals(
+              paragraph.getMinIntrinsicHeight(paragraph.size.width),
+            ),
+          );
+          final ending = paragraph
+              .getBoxesForSelection(
+                const TextSelection(
+                  baseOffset: notice.length - 8,
+                  extentOffset: notice.length,
+                ),
+              )
+              .last
+              .toRect();
+          expect(
+            tester
+                .getRect(scroll)
+                .contains(paragraph.localToGlobal(ending.center)),
+            isTrue,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.ensureVisible(find.text('Cancel'));
+          await tester.pumpAndSettle();
+          expect(find.text('Cancel').hitTestable(), findsOneWidget);
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
+          expect(find.text('New version available'), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+        forHarmonyOS: true,
+      );
+    }
+  }
 
   testUpdateWidgets(
     'about page disposal cancels its request and never sets state or shows late UI',
@@ -311,6 +403,50 @@ void main() {
   );
 
   for (final brightness in Brightness.values) {
+    testUpdateWidgets(
+      'TV update dialog identifies the correct APK in ${brightness.name}',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 720);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(
+          app(const AboutSettings(), brightness: brightness, textScale: 2),
+        );
+        await tester.tap(find.text('Check'));
+        await waitFor(tester, () => adapter.entered.isCompleted);
+        adapter.complete({
+          'tag_name': 'v2.0.0',
+          'assets': [
+            {
+              'name': 'VeneraNext-2.0.0-android-tv.apk',
+              'state': 'uploaded',
+              'size': 20,
+            },
+          ],
+        });
+        adapter.released.complete();
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'TV version 2.0.0 is available. Open the release page and choose an android-tv APK.',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pumpAndSettle();
+        final cancel = tester.element(find.text('Cancel'));
+        Focus.of(cancel).requestFocus();
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(find.text('New version available'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+      forAndroidTv: true,
+    );
+
     testUpdateWidgets(
       'large-text ${brightness.name} update dialog supports keyboard dismissal',
       (tester) async {

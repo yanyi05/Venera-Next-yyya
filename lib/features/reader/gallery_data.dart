@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/image_crop.dart';
 import 'page_layout.dart';
 import 'reader_controller.dart';
 
@@ -19,9 +20,12 @@ class ReaderGalleryData {
     required this.sourceKey,
     required this.comicId,
     required this.chapterId,
+    this.crop = const ReaderCrop(),
     this.imageRefreshRevision = 0,
+    this.imageRevisions = const {},
     this.showImageDimensions = false,
     this.observeImageReadiness = false,
+    this.decodePixelBudget,
   });
 
   final ReaderContentState content;
@@ -38,9 +42,12 @@ class ReaderGalleryData {
   final String? sourceKey;
   final String comicId;
   final String chapterId;
+  final ReaderCrop crop;
   final int imageRefreshRevision;
+  final Map<String, int> imageRevisions;
   final bool showImageDimensions;
   final bool observeImageReadiness;
+  final int? decodePixelBudget;
 
   List<String> get images => content.images ?? const [];
   int get imagePages => layout.pageCount(images.length);

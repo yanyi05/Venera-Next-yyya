@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:venera_next/features/favorites/favorites_repository.dart';
 
+import '../../support/legacy_favorites_fixture.dart';
+
 void main() {
   late Database db;
   late FavoritesRepository repository;
@@ -330,6 +332,56 @@ void main() {
           .map((row) => row['translated_tags']),
       everyElement('retry'),
     );
+  });
+
+  test('tag migration leaves SQLite internal schemas and rows intact', () {
+    db.execute('ALTER TABLE first ADD COLUMN translated_tags TEXT;');
+    db.execute("UPDATE first SET translated_tags = 'preserved';");
+    repository.linkFolderToNetwork('first', 'source', 'remote');
+    addSqliteInternalTables(db);
+    final internalBefore = sqliteInternalTableSnapshot(db);
+    expect(
+      internalBefore.keys,
+      containsAll(['sqlite_stat1', 'sqlite_sequence']),
+    );
+    if (db
+            .select(
+              "SELECT sqlite_compileoption_used('ENABLE_STAT4') AS enabled;",
+            )
+            .single['enabled'] ==
+        1) {
+      expect(internalBefore.keys, contains('sqlite_stat4'));
+    }
+
+    repository.migrateTranslatedTags(
+      repository.folderNames(),
+      (_) => 'backfill',
+    );
+    expect(repository.folderNames().toSet(), {
+      'first',
+      'second',
+      'empty',
+      '收藏 "A"',
+    });
+    expect(repository.findComic('first', 'same', 1)!.time, 'old time');
+    expect(repository.findLinked('first'), ('source', 'remote'));
+    expect(
+      db
+          .select('SELECT translated_tags FROM first')
+          .map((row) => row['translated_tags']),
+      everyElement('preserved'),
+    );
+    expect(
+      db
+          .select('SELECT translated_tags FROM second')
+          .map((row) => row['translated_tags']),
+      everyElement('backfill'),
+    );
+    expect(sqliteInternalTableSnapshot(db), internalBefore);
+    repository.migrateTranslatedTags(repository.folderNames(), (_) {
+      fail('Already migrated favorites must not be translated again');
+    });
+    expect(sqliteInternalTableSnapshot(db), internalBefore);
   });
 
   test('follow-update migration preserves values and rolls back failed reset', () {
@@ -667,6 +719,31 @@ void main() {
       expect(folders.toSet(), {'first', 'second', 'empty', '收藏 "A"'});
     },
   );
+
+  test('folder discovery excludes only the literal SQLite internal prefix', () {
+    for (final folder in ['sqliteXnotes', 'SQLITE-notes', 'sqlite']) {
+      repository.createFolder(folder);
+    }
+    addSqliteInternalTables(db);
+    db.execute(
+      "INSERT INTO folder_order VALUES ('second', -5), ('first', 8), "
+      "('sqlite_stat1', 0), ('sqlite_sequence', 0);",
+    );
+
+    final folders = repository.folderNames();
+    expect(folders.first, 'second');
+    expect(folders.last, 'first');
+    expect(folders.toSet(), {
+      'first',
+      'second',
+      'empty',
+      '收藏 "A"',
+      'sqliteXnotes',
+      'SQLITE-notes',
+      'sqlite',
+    });
+    expect(repository.getAllComics(folders), hasLength(3));
+  });
 
   test('folder queries preserve order, identity and empty folder defaults', () {
     expect(repository.getFolderComics('first').map((item) => item.id), [

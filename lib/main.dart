@@ -18,8 +18,11 @@ import 'package:venera_next/features/follow_updates/follow_updates.dart';
 import 'package:venera_next/app_runtime/background_sync.dart';
 import 'package:venera_next/app_runtime/interactive_platform_bindings.dart';
 import 'package:venera_next/app_runtime/window_placement.dart';
+import 'package:venera_next/app_runtime/windows_hotkey.dart';
+import 'package:venera_next/components/window_hotkey_scope.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
+import 'package:venera_next/foundation/translations.dart';
 import 'dart:async';
 import 'package:venera_next/app_runtime/sync_window_binding.dart';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
@@ -34,11 +37,13 @@ import 'package:venera_next/app_shell/startup_failure.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/file_interaction.dart';
 import 'components/gesture.dart';
+import 'components/tv_navigation.dart';
 import 'components/js_ui.dart';
 import 'components/message.dart';
 import 'components/window_frame.dart';
 import 'components/window_selection_task.dart';
 import 'foundation/app.dart';
+import 'foundation/app_profile.dart';
 import 'package:venera_next/routing/app_navigation.dart';
 import 'foundation/app_locale.dart';
 import 'foundation/appdata.dart';
@@ -58,6 +63,19 @@ void main(List<String> args) {
   }
   if (runWebViewTitleBarWidget(args)) return;
   var applicationShown = false;
+  Future<void> showFailure(Object error, StackTrace stack) async {
+    if (applicationShown) return;
+    applicationShown = true;
+    runApp(StartupFailureApp(error: error, stack: stack));
+    if (App.isDesktop) {
+      try {
+        await showStartupFailureWindow();
+      } catch (windowError, windowStack) {
+        Log.error('Startup window', windowError, windowStack);
+      }
+    }
+  }
+
   overrideIO(() {
     runZonedGuarded(
       () async {
@@ -68,7 +86,13 @@ void main(List<String> args) {
           });
           JsEngine().bindUiMessageHandler(JsUiApi());
           final sync = createApplicationDataSync();
-          final core = createCoreBootstrap(onDataChanged: sync.onDataChanged);
+          final core = createCoreBootstrap(
+            onDataChanged: sync.onDataChanged,
+            // Rollback still joins live JS callbacks and retains storage
+            // ownership. Its completion must not gate the first error frame.
+            onStartupFailure: (_, error, stack) =>
+                unawaited(showFailure(error, stack)),
+          );
           try {
             await init(core);
           } catch (error, stack) {
@@ -93,6 +117,7 @@ void main(List<String> args) {
             core: core,
             sync: sync,
             placement: placement,
+            windowHotkeys: App.isWindows ? createWindowsHotkeyHost() : null,
             sourceInstallations: SourceInstallations(
               manager: ComicSourceManager(),
               repositories: SourceRepositories.instance,
@@ -104,17 +129,7 @@ void main(List<String> args) {
           await placement?.initialize();
         } catch (error, stack) {
           Log.error('Startup', error, stack);
-          if (!applicationShown) {
-            applicationShown = true;
-            runApp(StartupFailureApp(error: error, stack: stack));
-            if (App.isDesktop) {
-              try {
-                await showStartupFailureWindow();
-              } catch (windowError, windowStack) {
-                Log.error('Startup window', windowError, windowStack);
-              }
-            }
-          }
+          await showFailure(error, stack);
         }
       },
       (error, stack) {
@@ -135,9 +150,26 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  Future<void> _tvBack() async {
+    if (!mounted || widget.host.isClosing) return;
+    if (await appNavigation.rootNavigatorKey.currentState?.maybePop() ??
+        false) {
+      return;
+    }
+    if (!mounted || widget.host.isClosing) return;
+    if (await appNavigation.mainNavigatorKey?.currentState?.maybePop() ??
+        false) {
+      return;
+    }
+    if (mounted && !widget.host.isClosing && App.isAndroid) {
+      await SystemNavigator.pop();
+    }
+  }
+
   late final _library = webDavLibrary;
   late final _interactiveBindings = createPlatformInteractiveBindings(
     placement: widget.host.placement?.attach(),
+    windowHotkey: widget.host.windowHotkeys?.attach(),
   );
   late final _dataSync = widget.host.sync;
   ApplicationMount? _mount;
@@ -189,6 +221,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
     });
     WidgetsBinding.instance.addObserver(this);
+    _interactiveBindings.windowHotkey?.addListener(_hotkeyChanged);
+  }
+
+  Object? _lastHotkeyError;
+
+  void _hotkeyChanged() {
+    final error = _interactiveBindings.windowHotkey?.error;
+    if (error == null || identical(error, _lastHotkeyError)) return;
+    _lastHotkeyError = error;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          !widget.host.isClosing &&
+          identical(_interactiveBindings.windowHotkey?.error, error)) {
+        final context =
+            appNavigation.rootNavigatorKey.currentState?.overlay?.context;
+        if (context != null && context.mounted) {
+          showToast(message: error.message.tl, context: context);
+        }
+      }
+    });
   }
 
   @override
@@ -198,6 +250,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       return;
     }
     WidgetsBinding.instance.removeObserver(this);
+    _interactiveBindings.windowHotkey?.removeListener(_hotkeyChanged);
     appNavigation.registerForceRebuild(null);
     hideContentOverlay?.remove();
     hideContentOverlay = null;
@@ -346,6 +399,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
       ),
       listTileTheme: ListTileThemeData(),
+      focusColor: AppProfile.current.isTv
+          ? primary.withValues(alpha: 0.25)
+          : null,
     );
   }
 
@@ -387,7 +443,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           tertiary = light.tertiary;
         }
         return MaterialApp(
-          title: "VeneraNext",
+          title: AppProfile.current.applicationTitle,
           home: home,
           debugShowCheckedModeBanner: false,
           theme: getTheme(primary, secondary, tertiary, Brightness.light),
@@ -428,7 +484,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   MediaQuery.of(context).viewPadding.top <= 0 ||
                   MediaQuery.of(context).viewPadding.top > 200;
 
-              if (isPaddingCheckError && Platform.isAndroid) {
+              if (isPaddingCheckError &&
+                  Platform.isAndroid &&
+                  !AppProfile.current.isTv) {
                 widget = MediaQuery(
                   data: MediaQuery.of(context).copyWith(
                     viewPadding: const EdgeInsets.only(top: 15, bottom: 15),
@@ -462,6 +520,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                             HistoryManager().waitForAsyncWrites,
                         isFinalizing: () => this.widget.host.isClosing,
                         prepareInteractive: _interactiveBindings.prepareForExit,
+                        holdWindowHotkey:
+                            _interactiveBindings.windowHotkey?.hold,
                         prepareFollowUpdates: () =>
                             prepareApplicationFollowUpdatesForExit(
                               _followUpdates,
@@ -496,6 +556,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 service: this.widget.host.applicationUpdates,
                 child: widget,
               );
+              final hotkey = _interactiveBindings.windowHotkey;
+              if (hotkey != null) {
+                widget = WindowHotkeyScope(controller: hotkey, child: widget);
+              }
               widget = WebDavLibraryScope(services: _library, child: widget);
               final installations = this.widget.host.sourceInstallations;
               if (installations != null) {
@@ -506,10 +570,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   child: widget,
                 );
               }
-              return _SystemUiProvider(
-                Material(
-                  color: App.isLinux ? Colors.transparent : null,
-                  child: widget,
+              return TvNavigation(
+                onBack: () => unawaited(_tvBack()),
+                child: _SystemUiProvider(
+                  Material(
+                    color: App.isLinux ? Colors.transparent : null,
+                    child: widget,
+                  ),
                 ),
               );
             }

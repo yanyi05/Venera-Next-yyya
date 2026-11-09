@@ -1,3 +1,5 @@
+import 'package:venera_next/foundation/image_crop.dart';
+
 /// Settings and comic identity captured for one continuous-view build.
 /// Active chapter/content remain in the injected navigation controller.
 class ReaderContinuousData {
@@ -18,8 +20,11 @@ class ReaderContinuousData {
     required this.centerLongPressZoom,
     required this.sourceKey,
     required this.comicId,
+    this.crop = const ReaderCrop(),
     this.imageRefreshRevision = 0,
+    this.imageRevisions = const {},
     this.showImageDimensions = false,
+    this.decodePixelBudget,
   });
 
   final bool vertical;
@@ -38,6 +43,9 @@ class ReaderContinuousData {
   final bool centerLongPressZoom;
   final String? sourceKey;
   final String comicId;
+  final ReaderCrop crop;
   final int imageRefreshRevision;
+  final Map<String, int> imageRevisions;
   final bool showImageDimensions;
+  final int? decodePixelBudget;
 }

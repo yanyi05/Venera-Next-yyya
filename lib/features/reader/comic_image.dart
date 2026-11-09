@@ -142,7 +142,10 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
     if (!mounted) return false;
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return false;
-    final bounds = box.localToGlobal(Offset.zero) & box.size;
+    final bounds = MatrixUtils.transformRect(
+      box.getTransformTo(null),
+      Offset.zero & box.size,
+    );
     final screen = Offset.zero & MediaQuery.sizeOf(context);
     final visible = bounds.intersect(screen);
     return visible.width > 1 && visible.height > 1;
@@ -438,6 +441,19 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
           );
           final shouldSplit =
               widget.splitWideImage && shouldSplitWideImage(imageSize);
+          // PhotoView can provide unbounded constraints; the overlay needs a finite box.
+          final naturalSize = shouldSplit
+              ? splitWideImageDisplaySize(imageSize)
+              : imageSize;
+          final layoutSize = constrains
+              .constrainSizeAndAttemptToPreserveAspectRatio(
+                Size(
+                  width?.isFinite == true ? width! : naturalSize.width,
+                  height?.isFinite == true ? height! : naturalSize.height,
+                ),
+              );
+          width = layoutSize.width;
+          height = layoutSize.height;
           // build image
           Widget result = shouldSplit
               ? _SplitWideImage(
@@ -507,7 +523,9 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
                             rectangles: masks,
                             color: ReaderImageMasks.readColor(maskAddress),
                             fit: widget.fit ?? BoxFit.scaleDown,
-                            alignment: widget.alignment.resolve(Directionality.maybeOf(context)),
+                            alignment: widget.alignment.resolve(
+                              Directionality.maybeOf(context),
+                            ),
                             split: shouldSplit,
                             splitInvert: widget.splitWideImageInvert,
                             matchTextDirection: widget.matchTextDirection,
@@ -596,9 +614,14 @@ class _ReaderMaskPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final displaySize = split ? splitWideImageDisplaySize(imageSize) : imageSize;
+    final displaySize = split
+        ? splitWideImageDisplaySize(imageSize)
+        : imageSize;
     final fitted = applyBoxFit(fit, displaySize, size);
-    final destination = alignment.inscribe(fitted.destination, Offset.zero & size);
+    final destination = alignment.inscribe(
+      fitted.destination,
+      Offset.zero & size,
+    );
     final paint = Paint()..color = color;
     if (!split) {
       for (final rect in rectangles) {
@@ -615,7 +638,9 @@ class _ReaderMaskPainter extends CustomPainter {
       return;
     }
     final slices = splitWideImageSlices(
-      invert: splitInvert ^ (matchTextDirection && textDirection == TextDirection.rtl),
+      invert:
+          splitInvert ^
+          (matchTextDirection && textDirection == TextDirection.rtl),
     );
     for (final rect in rectangles) {
       for (final slice in slices) {
@@ -626,10 +651,16 @@ class _ReaderMaskPainter extends CustomPainter {
         if (clippedRight <= clippedLeft) continue;
         canvas.drawRect(
           Rect.fromLTRB(
-            destination.left + ((clippedLeft - left) / slice.sourceWidth) * destination.width,
-            destination.top + (slice.displayTop + rect.top * slice.displayHeight) * destination.height,
-            destination.left + ((clippedRight - left) / slice.sourceWidth) * destination.width,
-            destination.top + (slice.displayTop + rect.bottom * slice.displayHeight) * destination.height,
+            destination.left +
+                ((clippedLeft - left) / slice.sourceWidth) * destination.width,
+            destination.top +
+                (slice.displayTop + rect.top * slice.displayHeight) *
+                    destination.height,
+            destination.left +
+                ((clippedRight - left) / slice.sourceWidth) * destination.width,
+            destination.top +
+                (slice.displayTop + rect.bottom * slice.displayHeight) *
+                    destination.height,
           ),
           paint,
         );

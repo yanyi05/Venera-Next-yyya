@@ -1,10 +1,10 @@
+import 'package:venera_next/foundation/startup_journal.dart';
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_saf/flutter_saf.dart';
+import 'package:venera_saf/venera_saf.dart';
 import 'package:path/path.dart' as path;
-import 'package:rhttp/rhttp.dart';
 import 'package:venera_next/features/comic_source/comic_source_api.dart';
 import 'package:venera_next/features/comic_source/source_data_storage.dart';
 import 'package:venera_next/features/comic_source/source_transaction_journal.dart';
@@ -17,6 +17,7 @@ import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/cache_manager.dart';
 import 'package:venera_next/foundation/js_engine.dart';
+import 'package:venera_next/foundation/harmonyos.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/opencc.dart';
 import 'package:venera_next/foundation/translations.dart';
@@ -34,11 +35,20 @@ import 'webdav_library.dart';
 CoreBootstrap createCoreBootstrap({
   Future<void> Function()? environment,
   required void Function() onDataChanged,
+  void Function(String phase, Object error, StackTrace stack)? onStartupFailure,
 }) {
   final cleanup = <CoreStartupCleanup>[];
   final producers = <CoreStartupCleanup>[];
   SqliteDataSyncOwnership? applicationOwnership;
   var storeCleanupIndex = 0;
+  var failureReported = false;
+  void reportFailure(String phase, Object error, StackTrace stack) {
+    if (failureReported) return;
+    failureReported = true;
+    Log.error('Startup', '$phase failed: $error', stack);
+    onStartupFailure?.call(phase, error, stack);
+  }
+
   void registerProducer(String name, FutureOr<void> Function() close) {
     Future<void>? closing;
     final resource = (
@@ -51,8 +61,8 @@ CoreBootstrap createCoreBootstrap({
 
   return CoreBootstrap(
     failureCleanup: cleanup,
-    onStartupFailure: (phase, error, stack) =>
-        Log.error('Startup', '$phase failed: $error', stack),
+    onPhaseChanged: (phase) => StartupJournal.current?.record(phase),
+    onStartupFailure: reportFailure,
     releaseOwnership: () => applicationOwnership?.release(),
     shutdownPreparation: () async {
       // A failed producer can still retain native resources. Keep its stores
@@ -67,7 +77,18 @@ CoreBootstrap createCoreBootstrap({
         }
       }
     },
-    environment: environment ?? App.init,
+    environment:
+        environment ??
+        () async {
+          await App.init();
+          final journal = StartupJournal(App.dataPath)..read();
+          StartupJournal.current = journal;
+          try {
+            journal.record('settings');
+          } catch (error, stack) {
+            Log.error('Startup journal', error, stack);
+          }
+        },
     settings: () async {
       // One core owns this directory, including its isolates and accepted
       // descendants, until stores close. In-process snapshots still use
@@ -125,8 +146,9 @@ CoreBootstrap createCoreBootstrap({
       await initializeCoreInfrastructure(
         directory: App.dataPath,
         services: [
-          Rhttp.init,
-          () => _optional('SAF worker', () => SAFTaskWorker().init()),
+          HarmonyOS.initializeHttp,
+          if (!App.isHarmonyOS)
+            () => _optional('SAF worker', () => SAFTaskWorker().init()),
           () => _optional('App translations', AppTranslation.init),
           () => _optional('Tag translations', TagsTranslation.readData),
           OpenCC.init,
@@ -170,7 +192,8 @@ CoreBootstrap createCoreBootstrap({
       final engine = JsEngine();
       registerProducer('JS engine', engine.closeAndWait);
       await engine.init();
-      final sources = ComicSourceManager();
+      final sources = ComicSourceManager()
+        ..loadInstalledSources = StartupJournal.current?.safeMode != true;
       registerProducer('comic sources', sources.closeAndWait);
       await sources.init();
     },
@@ -197,7 +220,10 @@ CoreBootstrap createCoreBootstrap({
         ),
         (name: 'local', initialize: local.init, close: local.dispose),
       ];
-      await initializeCoreStores(stores);
+      await initializeCoreStores(
+        stores,
+        onFailure: (error, stack) => reportFailure('stores', error, stack),
+      );
       // The group handles its own failed attempt; retain only successful stores
       // for a failure in a later startup phase.
       cleanup.insertAll(

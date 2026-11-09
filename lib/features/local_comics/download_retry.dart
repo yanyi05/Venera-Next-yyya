@@ -82,6 +82,22 @@ class DownloadRetry {
 
 enum _Failure { connection, terminal, unknown }
 
+/// Skipping never hides cancellation, authentication, TLS or local write errors.
+bool canSkipUnavailableDownloadImage(Object error, [int depth = 0]) {
+  if (depth > 8) return false;
+  if (error is FailureDetails) {
+    if (error.kind == FailureKind.unsupported) return true;
+    final cause = error.cause;
+    return error.kind == FailureKind.failed &&
+        cause != null &&
+        canSkipUnavailableDownloadImage(cause, depth + 1);
+  }
+  if (error is DioException && error.type == DioExceptionType.badResponse) {
+    return const [404, 410].contains(error.response?.statusCode);
+  }
+  return _classify(error) == _Failure.connection;
+}
+
 _Failure _classify(Object error, [int depth = 0]) {
   if (depth > 8) return _Failure.terminal;
   if (error is FailureDetails) {

@@ -2,7 +2,7 @@
 
 [简体中文](linux.zh.md) · [README](../../README.en.md#linux)
 
-Choose an asset from the [latest stable release](https://github.com/CyrilPeng/Venera-Next/releases/latest) matching `uname -m`: `x86_64` corresponds to x64 / amd64; `aarch64` corresponds to ARM64 / arm64. The current stable release, [v1.18.0](https://github.com/CyrilPeng/Venera-Next/releases/tag/v1.18.0), includes DEB, RPM and AppImage packages for both architectures, plus an x86_64 Arch package. Development builds are available as artifacts of the **构建** (Build) Actions workflow.
+Choose an asset from the [latest stable release](https://github.com/CyrilPeng/Venera-Next/releases/latest) matching `uname -m`: `x86_64` corresponds to x64 / amd64; `aarch64` corresponds to ARM64 / arm64. The current stable release, [v1.18.1](https://github.com/CyrilPeng/Venera-Next/releases/tag/v1.18.1), includes DEB, RPM and AppImage packages for both architectures, plus an x86_64 Arch package. Development builds are available as artifacts of the **构建** (Build) Actions workflow.
 
 ## Installation
 
@@ -36,7 +36,7 @@ Use the `aarch64` asset for ARM64. No administrator permission is needed. Menu i
 
 Linux packages share a binary compiled on Ubuntu 22.04 with a glibc 2.35 baseline. DEB/RPM use the package manager to install system dependencies such as libstdc++, GTK 3 and WebKitGTK 4.1. RPM records system ELF symbol requirements automatically, and the package manager rejects installation when dependencies are missing.
 
-The current v1.18.0 stable AppImage includes Flutter, GTK 3, WebKitGTK 4.1, its helper processes, image loaders and runtime resources, so no separate GTK/WebKit installation is needed. It still requires host glibc 2.35 or newer and compatible OpenGL/EGL graphics drivers. Filenames are `VeneraNext-<version>-x86_64.AppImage` or `VeneraNext-<version>-aarch64.AppImage`, without `linux`. These bundled libraries and filename changes were introduced in v1.17.0-rc.2.
+The current v1.18.1 stable AppImage includes Flutter, GTK 3, WebKitGTK 4.1, its helper processes, image loaders and runtime resources, so no separate GTK/WebKit installation is needed. It still requires host glibc 2.35 or newer and compatible OpenGL/EGL graphics drivers. Filenames are `VeneraNext-<version>-x86_64.AppImage` or `VeneraNext-<version>-aarch64.AppImage`, without `linux`. These bundled libraries and filename changes were introduced in v1.17.0-rc.2.
 
 The already published **v1.17.0-rc.1 AppImage does not bundle GTK/WebKit** and uses filenames containing linux. That release still needs the following host packages; DEB/RPM continue to use system dependencies:
 

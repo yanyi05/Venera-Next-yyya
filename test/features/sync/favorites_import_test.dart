@@ -1,6 +1,7 @@
 import 'package:archive/archive.dart' as archive;
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'package:venera_next/foundation/app_data_operations.dart';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +14,9 @@ import 'package:venera_next/features/sync/data_sync_commit.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/comic_type.dart';
+
+import '../../support/legacy_favorites_fixture.dart';
+import '../../support/zip_fixture.dart';
 
 FavoriteItem _item(String id) => FavoriteItem(
   id: id,
@@ -148,9 +152,102 @@ void main() {
     },
   );
 
+  test(
+    'analyzed legacy favorites import from a backup and reopen intact',
+    () async {
+      final root = Directory.systemTemp.createTempSync(
+        'analyzed-favorites-import-',
+      );
+      final checkpoint = appdata.captureImportCheckpoint();
+      final manager = LocalFavoritesManager();
+      try {
+        App.dataPath = (Directory('${root.path}/data')..createSync()).path;
+        App.cachePath = (Directory('${root.path}/cache')..createSync()).path;
+        await manager.init();
+        await manager.createFolder('original');
+        await manager.addComic('original', _item('old'));
+        final incomingPath = '${root.path}/incoming.db';
+        final incoming = sqlite3.open(incomingPath);
+        late Map<String, Object?> internalBefore;
+        try {
+          seedAnalyzedLegacyFavorites(incoming);
+          // Other SQLite internals must survive hierarchy metadata replacement.
+          internalBefore = sqliteInternalTableSnapshot(
+            incoming,
+            excludeStatisticsFor: {'folder_order'},
+          );
+        } finally {
+          incoming.dispose();
+        }
+        final settings =
+            jsonDecode(jsonEncode(appdata.toJson())) as Map<String, dynamic>;
+        (settings['settings'] as Map<String, dynamic>)
+          ..['followUpdatesFolder'] = 'sqliteXnotes'
+          ..['quickFavorite'] = 'legacy';
+        final settingsFile = File('${root.path}/incoming.json')
+          ..writeAsStringSync(jsonEncode(settings));
+        final source = File('${root.path}/data.venera');
+        final zip = ZipFile.open(source.path);
+        zip.addFile('local_favorite.db', incomingPath);
+        zip.addFile('appdata.json', settingsFile.path);
+        zip.close();
+
+        expect(await importAppData(source), DataSyncCommitState.applied);
+        for (var attempt = 0; attempt < 2; attempt++) {
+          expect(manager.folderNames, ['sqliteXnotes', 'legacy']);
+          expect(manager.counts, {'sqliteXnotes': 1, 'legacy': 1});
+          expect(manager.totalComics, 2);
+          expect(manager.isExist('legacy-id', ComicType.local), isTrue);
+          expect(manager.isExist('old', ComicType.local), isFalse);
+          final tracked = manager
+              .getComicsWithUpdatesInfo('sqliteXnotes')
+              .single;
+          expect(tracked.hasNewUpdate, isTrue);
+          expect(tracked.updateTime, 'chapter 2');
+          expect(tracked.lastCheckTime!.millisecondsSinceEpoch, 123);
+          // Import applies folder settings after reopening the store; check
+          // persisted fields above and the selected-folder cache after restart.
+          if (attempt > 0) {
+            expect(manager.hasNewUpdate('modern-id', ComicType.local), isTrue);
+          }
+          expect(manager.findLinked('legacy'), (
+            'fixture-source',
+            'remote-folder',
+          ));
+          expect(appdata.settings['followUpdatesFolder'], 'sqliteXnotes');
+          expect(appdata.settings['quickFavorite'], 'legacy');
+          final legacy = (await manager.getFolderComicsAsync('legacy')).single;
+          expect(legacy.name, 'Legacy favorite');
+          expect(legacy.tags, ['tag', 'second']);
+          expect(legacy.time, '2001-02-03 04:05:06');
+          expect(manager.search('preserved').single.id, 'modern-id');
+          final persisted = sqlite3.open(
+            manager.databasePath,
+            mode: OpenMode.readOnly,
+          );
+          try {
+            expect(sqliteInternalTableSnapshot(persisted), internalBefore);
+            expect(
+              persisted.select('PRAGMA quick_check;').single['quick_check'],
+              'ok',
+            );
+          } finally {
+            persisted.dispose();
+          }
+          await manager.closeAndWait();
+          if (attempt == 0) await manager.init();
+        }
+      } finally {
+        await manager.closeAndWait();
+        await appdata.restoreImportCheckpoint(checkpoint, persist: false);
+        root.deleteSync(recursive: true);
+      }
+    },
+  );
+
   for (final corrupt in [false, true]) {
     test(
-      'favorite database import replaces or rolls back with readers; corrupt=$corrupt',
+      'favorite database import replaces or rejects before mutation with readers; corrupt=$corrupt',
       () async {
         final root = Directory.systemTemp.createTempSync('favorites-import-');
         final previousTracking = appdata.settings['followUpdatesFolder'];
@@ -195,22 +292,16 @@ void main() {
               ),
           ];
           if (corrupt) {
+            final generation = manager.connectionGeneration;
+            final bytes = File(manager.databasePath).readAsBytesSync();
+            final settings = jsonEncode(appdata.toJson());
             await expectLater(
               importAppData(File(archivePath)),
-              throwsA(
-                isA<DataSyncImportFailure>()
-                    .having(
-                      (error) => error.commitState,
-                      'rollback outcome',
-                      DataSyncCommitState.notApplied,
-                    )
-                    .having(
-                      (error) => error.cause,
-                      'original SQL error',
-                      isA<SqliteException>(),
-                    ),
-              ),
+              throwsA(isA<SqliteException>()),
             );
+            expect(manager.connectionGeneration, generation);
+            expect(File(manager.databasePath).readAsBytesSync(), bytes);
+            expect(jsonEncode(appdata.toJson()), settings);
             expect(manager.getFolderComics('original').single.id, 'old');
           } else {
             await importAppData(File(archivePath));
@@ -233,5 +324,94 @@ void main() {
         }
       },
     );
+  }
+
+  for (final sync in [false, true]) {
+    for (final damage in ZipFixtureDamage.values) {
+      test(
+        'damaged ZIP preserves live favorites and settings; sync=$sync damage=$damage',
+        () async {
+          final root = Directory.systemTemp.createTempSync(
+            'damaged-favorites-',
+          );
+          final checkpoint = appdata.captureImportCheckpoint();
+          final manager = LocalFavoritesManager();
+          try {
+            App.dataPath = (Directory('${root.path}/data')..createSync()).path;
+            App.cachePath = (Directory(
+              '${root.path}/cache',
+            )..createSync()).path;
+            await manager.init();
+            await manager.createFolder('original');
+            await manager.addComic('original', _item('old'));
+            await manager.debugWaitForHashedIdsRefresh();
+            await appdata.saveData(false);
+            final generation = manager.connectionGeneration;
+            final before = File(manager.databasePath).readAsBytesSync();
+            final settings = jsonEncode(appdata.toJson());
+            final savedSettings = File(
+              '${App.dataPath}/appdata.json',
+            ).readAsBytesSync();
+            final incomingPath = '${root.path}/incoming.db';
+            final incoming = sqlite3.open(incomingPath);
+            try {
+              final repository = FavoritesRepository(incoming)
+                ..initializeMetadata();
+              repository.createFolder('imported');
+              repository.addComic(
+                'imported',
+                _item('new'),
+                translatedTags: '',
+                append: true,
+              );
+            } finally {
+              incoming.dispose();
+            }
+            final entries = [
+              ZipFixtureEntry(
+                utf8.encode('appdata.json'),
+                utf8.encode(
+                  jsonEncode({
+                    'settings': {'language': 'ja-JP'},
+                    'searchHistory': ['incoming'],
+                  }),
+                ),
+              ),
+              ZipFixtureEntry(
+                utf8.encode('local_favorite.db'),
+                File(incomingPath).readAsBytesSync(),
+              ),
+            ];
+            final source = File('${root.path}/incoming.venera')
+              ..writeAsBytesSync(zipFixture(entries, damage: damage));
+            Future<DataSyncCommitState> restore() => sync
+                ? importSyncAppData(source, checkActive: () {})
+                : importAppData(source);
+
+            await expectLater(restore(), throwsFormatException);
+            expect(manager.connectionGeneration, generation);
+            expect(File(manager.databasePath).readAsBytesSync(), before);
+            expect(jsonEncode(appdata.toJson()), settings);
+            expect(
+              File('${App.dataPath}/appdata.json').readAsBytesSync(),
+              savedSettings,
+            );
+            expect(manager.getFolderComics('original').single.id, 'old');
+            expect(Directory(App.cachePath).listSync(), isEmpty);
+
+            source.writeAsBytesSync(zipFixture(entries));
+            expect(await restore(), DataSyncCommitState.applied);
+            expect(manager.getFolderComics('imported').single.id, 'new');
+            expect(manager.isExist('old', ComicType.local), isFalse);
+            expect(appdata.searchHistory, ['incoming']);
+          } finally {
+            await AppDataOperations.instance.run(() async {});
+            await manager.closeAndWait();
+            await appdata.restoreImportCheckpoint(checkpoint, persist: false);
+            root.deleteSync(recursive: true);
+          }
+        },
+      );
+    }
   }
 }

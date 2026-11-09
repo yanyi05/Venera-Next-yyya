@@ -1,6 +1,7 @@
 #pragma comment(lib, "winhttp.lib")
 #include "flutter_window.h"
 #include "startup_log.h"
+#include "window_hotkey_channel.h"
 #include <optional>
 #include <cstdlib>
 #include <iostream>
@@ -76,6 +77,9 @@ bool FlutterWindow::OnCreate() {
   LogWindowsStartup("Registering native plugins");
   RegisterPlugins(flutter_controller_->engine());
   LogWindowsStartup("Native plugins registered");
+  window_hotkey_.SetWindow(GetHandle());
+  RegisterWindowHotkeyChannel(flutter_controller_->engine()->messenger(),
+                              window_hotkey_);
 
   const flutter::MethodChannel<> channel(
       flutter_controller_->engine()->messenger(), "venera/method_channel",
@@ -205,6 +209,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  window_hotkey_.Shutdown();
   heartbeat_monitor_.Shutdown();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -225,6 +230,9 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+    if (message == WM_HOTKEY && window_hotkey_.HandleHotkey(wparam)) {
+      return 0;
+    }
   // Give Flutter, including plugins, an opportunity to handle window messages.
     UINT button = GET_XBUTTON_WPARAM(wparam);
     if (button == XBUTTON1 && message == 528)

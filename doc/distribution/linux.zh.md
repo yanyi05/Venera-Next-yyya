@@ -2,7 +2,7 @@
 
 [English](linux.en.md) · [返回 README](../../README.md#linux)
 
-从 [最新稳定版](https://github.com/CyrilPeng/Venera-Next/releases/latest) 下载与机器架构对应的包。`uname -m` 输出 `x86_64` 时选择 x64 / amd64，输出 `aarch64` 时选择 ARM64 / arm64。当前稳定版 [v1.18.0](https://github.com/CyrilPeng/Venera-Next/releases/tag/v1.18.0) 提供两种架构的 DEB、RPM 和 AppImage，以及 x86_64 的 Arch 包；开发构建产物可在 GitHub Actions 的“构建”工作流中下载。
+从 [最新稳定版](https://github.com/CyrilPeng/Venera-Next/releases/latest) 下载与机器架构对应的包。`uname -m` 输出 `x86_64` 时选择 x64 / amd64，输出 `aarch64` 时选择 ARM64 / arm64。当前稳定版 [v1.18.1](https://github.com/CyrilPeng/Venera-Next/releases/tag/v1.18.1) 提供两种架构的 DEB、RPM 和 AppImage，以及 x86_64 的 Arch 包；开发构建产物可在 GitHub Actions 的“构建”工作流中下载。
 
 ## 安装
 
@@ -40,7 +40,7 @@ AppImage 不需管理员权限，不会自动安装菜单入口；下载新文�
 
 所有 Linux 格式目前复用 Ubuntu 22.04 编译的程序，glibc 基线为 2.35。DEB/RPM 通过包管理器获取 libstdc++、GTK 3 和 WebKitGTK 4.1 等系统依赖；RPM 使用 ELF 依赖检测记录所需符号版本，包管理器会拒绝缺失依赖的安装。
 
-当前 v1.18.0 稳定版 AppImage 携带 Flutter、GTK 3、WebKitGTK 4.1、WebKit 子进程、图片加载器及相关运行资源，无需额外安装 GTK/WebKit。仍需宿主提供 glibc 2.35 或更新版本，以及兼容的 OpenGL/EGL 显卡驱动。文件名为 `VeneraNext-<版本>-x86_64.AppImage` 或 `VeneraNext-<版本>-aarch64.AppImage`，不含 `linux`。这些运行库与文件名调整已从 v1.17.0-rc.2 开始采用。
+当前 v1.18.1 稳定版 AppImage 携带 Flutter、GTK 3、WebKitGTK 4.1、WebKit 子进程、图片加载器及相关运行资源，无需额外安装 GTK/WebKit。仍需宿主提供 glibc 2.35 或更新版本，以及兼容的 OpenGL/EGL 显卡驱动。文件名为 `VeneraNext-<版本>-x86_64.AppImage` 或 `VeneraNext-<版本>-aarch64.AppImage`，不含 `linux`。这些运行库与文件名调整已从 v1.17.0-rc.2 开始采用。
 
 已经发布的 **v1.17.0-rc.1 AppImage 未包含 GTK/WebKit**，文件名包含 linux；该版本仍需手动安装以下运行依赖。DEB/RPM 继续通过包管理器获取系统依赖：
 

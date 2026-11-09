@@ -108,6 +108,64 @@ void main() {
 
   for (final mode in [
     ReaderMode.galleryLeftToRight,
+    ReaderMode.galleryRightToLeft,
+    ReaderMode.galleryTopToBottom,
+  ]) {
+    for (final landscapeImages in [1, 2]) {
+      for (final duringAnimation in [false, true]) {
+        testWidgets(
+          'actual automatic gallery resumes after rotation: ${mode.key} spread=$landscapeImages animated=$duringAnimation',
+          (tester) async {
+            tester.view.devicePixelRatio = 1;
+            tester.view.physicalSize = const Size(375, 667);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            addTearDown(tester.view.resetPhysicalSize);
+            final fixture = await _ReaderFixture.create(tester, imageCount: 12);
+            try {
+              appdata.settings['readerMode'] = mode.key;
+              appdata.settings['readerScreenPicNumberForLandscape'] =
+                  landscapeImages;
+              appdata.settings['autoPageTurningInterval'] = 1;
+              appdata.settings['enablePageAnimation'] = true;
+              await fixture.mount(tester, pushed: false, withWindow: false);
+              final reader = fixture.readerKey.currentState!;
+              Future<void> expectAutomaticAdvance() async {
+                await _pumpUntil(tester, () {
+                  final viewport = reader.imageViewController;
+                  return !reader.isPageAnimating &&
+                      viewport is AutoReadingViewport &&
+                      (viewport as AutoReadingViewport).autoReadingReady;
+                });
+                final before = reader.page;
+                await _pumpUntil(
+                  tester,
+                  () => reader.page > before && !reader.isPageAnimating,
+                );
+                expect(reader.autoReading.isActive, isTrue);
+              }
+
+              reader.autoReading.start();
+              if (duringAnimation) {
+                await _pumpUntil(tester, () => reader.isPageAnimating);
+              }
+              tester.view.physicalSize = const Size(667, 375);
+              await tester.pump();
+              await expectAutomaticAdvance();
+              tester.view.physicalSize = const Size(375, 667);
+              await tester.pump();
+              await expectAutomaticAdvance();
+              expect(tester.takeException(), isNull);
+            } finally {
+              await fixture.dispose(tester);
+            }
+          },
+        );
+      }
+    }
+  }
+
+  for (final mode in [
+    ReaderMode.galleryLeftToRight,
     ReaderMode.continuousTopToBottom,
     ReaderMode.waterfallTopToBottom,
   ]) {
@@ -954,6 +1012,74 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'diagnostics confirms after benign reader updates and stops in background',
+    (tester) async {
+      final fixture = await _ReaderFixture.create(tester);
+      try {
+        await fixture.mount(tester, pushed: false, withWindow: false);
+        final reader = fixture.readerKey.currentState!;
+        final scaffold = tester.state<ReaderScaffoldState>(
+          find.byType(ReaderScaffold),
+        );
+        scaffold.openOrClose();
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Reading diagnostics'));
+        await tester.pumpAndSettle();
+        expect(reader.readerDiagnostics.isRecording, isFalse);
+        reader.update();
+        await tester.pump();
+        await tester.tap(find.text('Start new 45-second capture'));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(reader.readerDiagnostics.isRecording, isTrue);
+        expect(find.byTooltip('Stop and review'), findsOneWidget);
+        reader.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        reader.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await tester.pump();
+        expect(reader.readerDiagnostics.isRecording, isFalse);
+        expect(
+          jsonDecode(reader.readerDiagnostics.exportJson())['stopReason'],
+          'background',
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await fixture.dispose(tester);
+      }
+    },
+  );
+
+  for (final interruption in ['background', 'mode']) {
+    testWidgets(
+      'diagnostics confirmation cannot restart after $interruption interruption',
+      (tester) async {
+        final fixture = await _ReaderFixture.create(tester);
+        try {
+          await fixture.mount(tester, pushed: false, withWindow: false);
+          final reader = fixture.readerKey.currentState!;
+          final opening = reader.openDiagnostics();
+          await tester.pumpAndSettle();
+          if (interruption == 'background') {
+            reader.didChangeAppLifecycleState(AppLifecycleState.inactive);
+            reader.didChangeAppLifecycleState(AppLifecycleState.resumed);
+          } else {
+            reader.applyReadingMode(ReaderMode.galleryRightToLeft);
+            reader.applyReadingMode(ReaderMode.galleryLeftToRight);
+          }
+          await tester.tap(find.text('Start new 45-second capture'));
+          await tester.pumpAndSettle();
+          await tester.pump(const Duration(milliseconds: 400));
+          await opening;
+          expect(reader.readerDiagnostics.isRecording, isFalse);
+          expect(reader.readerDiagnostics.hasCapture, isFalse);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await fixture.dispose(tester);
+        }
+      },
+    );
+  }
 
   for (final mode in ReaderMode.values) {
     testWidgets('progress dispatches image endpoints in ${mode.key}', (

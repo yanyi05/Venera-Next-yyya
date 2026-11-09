@@ -15,6 +15,8 @@ import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/features/favorites/favorites.dart';
 import 'package:venera_next/features/follow_updates/follow_updates.dart';
 
+import '../../support/legacy_favorites_fixture.dart';
+
 FavoriteItem _favorite(String id) {
   return FavoriteItem(
     id: id,
@@ -101,6 +103,50 @@ LocalFavoritesManager _ownedFavorites() {
 }
 
 void main() {
+  test(
+    'case-only folder rename preserves settings and rejects other names',
+    () async {
+      await _withFavoritesManager((manager) async {
+        final previousLater = appdata.settings['readLaterFolder'];
+        try {
+          await manager.createFolder('ip');
+          await manager.createFolder('IP0');
+          await manager.addComic('ip', _favorite('kept'));
+          await manager.prepareTableForFollowUpdates('ip');
+          final id = manager.folderTree.named('ip')!.id;
+          for (final key in [
+            'readLaterFolder',
+            'quickFavorite',
+            'followUpdatesFolder',
+          ]) {
+            appdata.settings[key] = 'ip';
+          }
+          await expectLater(manager.createFolder('IP'), throwsException);
+          expect(await manager.createFolder('IP', true), 'IP1');
+          await expectLater(manager.rename('ip', 'ip0'), throwsException);
+          await manager.rename('ip', 'IP');
+          expect(manager.folderTree.named('IP')!.id, id);
+          expect(manager.folderComics('IP'), 1);
+          expect(manager.getFolderComics('IP').single.id, 'kept');
+          for (final key in [
+            'readLaterFolder',
+            'quickFavorite',
+            'followUpdatesFolder',
+          ]) {
+            expect(appdata.settings[key], 'IP');
+          }
+          await manager.rename('IP', 'IP');
+          await manager.closeAndWait();
+          await manager.init();
+          expect(manager.folderTree.named('IP')!.id, id);
+          expect(manager.getFolderComics('IP').single.id, 'kept');
+        } finally {
+          appdata.settings['readLaterFolder'] = previousLater;
+        }
+      });
+    },
+  );
+
   for (final action in [
     'add',
     'storage add',
@@ -1233,6 +1279,7 @@ void main() {
         final path = '${App.dataPath}/local_favorite.db';
         final db = sqlite3.open(path);
         db.execute('DROP TABLE folder_order;');
+        db.execute('PRAGMA user_version = 0;');
         db.execute('CREATE TABLE folder_order (invalid TEXT);');
         db.dispose();
         final first = manager.init();
@@ -1724,6 +1771,87 @@ void main() {
       expect(tracked.single.hasNewUpdate, isFalse);
     },
     skip: _sqliteAvailable() ? false : 'sqlite3 native library is unavailable',
+  );
+
+  test(
+    'analyzed legacy favorites initialize indexes and survive restart',
+    () async {
+      final root = Directory.systemTemp.createTempSync('analyzed-favorites-');
+      final checkpoint = appdata.captureImportCheckpoint();
+      final manager = LocalFavoritesManager.independent();
+      try {
+        App.dataPath = root.path;
+        App.cachePath = (Directory('${root.path}/cache')..createSync()).path;
+        appdata.settings['followUpdatesFolder'] = 'sqliteXnotes';
+        appdata.settings['quickFavorite'] = 'legacy';
+        final seed = sqlite3.open('${root.path}/local_favorite.db');
+        late Map<String, Object?> internalBefore;
+        try {
+          seedAnalyzedLegacyFavorites(seed);
+          // Rebuilding hierarchy metadata invalidates only its old statistics.
+          internalBefore = sqliteInternalTableSnapshot(
+            seed,
+            excludeStatisticsFor: {'folder_order'},
+          );
+        } finally {
+          seed.dispose();
+        }
+
+        for (var attempt = 0; attempt < 2; attempt++) {
+          await manager.init();
+          expect(manager.folderNames, ['sqliteXnotes', 'legacy']);
+          expect(manager.counts, {'sqliteXnotes': 1, 'legacy': 1});
+          expect(manager.totalComics, 2);
+          expect(manager.isExist('legacy-id', ComicType.local), isTrue);
+          expect(manager.isExist('modern-id', ComicType.local), isTrue);
+          expect(manager.hasNewUpdate('modern-id', ComicType.local), isTrue);
+          expect(manager.findLinked('legacy'), (
+            'fixture-source',
+            'remote-folder',
+          ));
+          expect(appdata.settings['followUpdatesFolder'], 'sqliteXnotes');
+          expect(appdata.settings['quickFavorite'], 'legacy');
+          final legacy = manager.getFolderComics('legacy').single;
+          expect(legacy.name, 'Legacy favorite');
+          expect(legacy.tags, ['tag', 'second']);
+          expect(legacy.time, '2001-02-03 04:05:06');
+          final asyncLegacy = (await manager.getFolderComicsAsync(
+            'legacy',
+          )).single;
+          expect(asyncLegacy.toJson(), legacy.toJson());
+          expect(asyncLegacy.time, legacy.time);
+          expect(
+            (await manager.getAllComicsAsync()).map((item) => item.id),
+            unorderedEquals(['legacy-id', 'modern-id']),
+          );
+          expect(manager.search('Legacy').single.id, 'legacy-id');
+          expect(
+            manager.searchInFolder('sqliteXnotes', 'preserved').single.id,
+            'modern-id',
+          );
+          final persisted = sqlite3.open(
+            manager.databasePath,
+            mode: OpenMode.readOnly,
+          );
+          try {
+            expect(sqliteInternalTableSnapshot(persisted), internalBefore);
+            expect(
+              persisted.select('PRAGMA quick_check;').single['quick_check'],
+              'ok',
+            );
+          } finally {
+            persisted.dispose();
+          }
+          await manager.closeAndWait();
+        }
+      } finally {
+        await manager.closeAndWait();
+        manager.dispose();
+        await appdata.restoreImportCheckpoint(checkpoint, persist: false);
+        root.deleteSync(recursive: true);
+      }
+    },
+    skip: !_sqliteAvailable(),
   );
 
   test(

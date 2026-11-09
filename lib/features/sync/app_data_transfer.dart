@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'package:uuid/uuid.dart';
 import 'package:venera_next/foundation/app_data_operations.dart';
+import 'package:venera_next/foundation/app_data_sync_fields.dart';
 
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/appdata.dart';
@@ -18,6 +19,8 @@ import 'package:venera_next/features/comic_source/comic_source_api.dart';
 import 'package:venera_next/features/comic_source/source_data_storage.dart';
 import 'package:venera_next/features/comic_source/source_transaction_journal.dart';
 import 'package:venera_next/features/favorites/favorites_manager.dart';
+import 'package:venera_next/features/favorites/favorites_repository.dart';
+import 'package:venera_next/foundation/sqlite_connection.dart';
 import 'package:venera_next/features/history/history_manager.dart';
 import 'package:venera_next/network/cookie_jar.dart';
 import 'package:venera_next/foundation/file_system.dart';
@@ -60,8 +63,11 @@ Future<File> _exportAppData(
   await appdata.saveData(false);
   final archiveData =
       jsonDecode(jsonEncode(appdata.toJson())) as Map<String, dynamic>;
+  final settings = archiveData['settings'] as Map<String, dynamic>;
+  for (final field in appDataDeviceOnlyFields) {
+    settings.remove(field);
+  }
   if (sync) {
-    final settings = archiveData['settings'] as Map<String, dynamic>;
     for (final field in appdata.splitField(
       content?.scope.excludedFields ??
           SyncConfiguration.readExcludedFields(settings['disableSyncFields']),
@@ -199,6 +205,17 @@ Future<DataSyncCommitState> _importAppData(
       if (version != null &&
           SyncConfiguration.requireDataVersion(version) <= currentVersion) {
         return DataSyncCommitState.notApplied;
+      }
+    }
+
+    if (await localFavoriteFile.exists()) {
+      final stagedFavorites = openSqliteDatabase(localFavoriteFile.path);
+      try {
+        final repository = FavoritesRepository(stagedFavorites);
+        repository.initializeMetadata();
+        repository.initializeHierarchy();
+      } finally {
+        stagedFavorites.dispose();
       }
     }
 

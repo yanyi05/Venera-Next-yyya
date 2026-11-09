@@ -70,6 +70,85 @@ Widget _view({
     );
 
 void main() {
+  testWidgets('reset preserves the mounted view and stops every old animation',
+      (tester) async {
+    final controller = _Controller();
+    final scale = _ScaleController();
+    await tester.pumpWidget(_view(controller: controller, scale: scale));
+    await tester.pumpAndSettle();
+    final element = tester.element(find.byType(PhotoViewCore));
+    final core = tester.state<PhotoViewCoreState>(find.byType(PhotoViewCore));
+    controller.updateMultiple(
+        scale: 3,
+        position: const Offset(80, 50),
+        rotation: .5,
+        rotationFocusPoint: const Offset(20, 30));
+    controller.animateScale!(4, const Offset(120, 80));
+    core.animateRotation(.5, 1.5);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    controller.reset();
+    final resetValue = controller.value;
+    expect(resetValue.scale, 1);
+    expect(resetValue.position, Offset.zero);
+    expect(resetValue.rotation, 0);
+    expect(resetValue.rotationFocusPoint, isNull);
+    expect(scale.scaleState, PhotoViewScaleState.initial);
+    await tester.pumpAndSettle();
+    expect(controller.value, resetValue);
+    expect(tester.element(find.byType(PhotoViewCore)), same(element));
+    controller.onDoubleClick!();
+    expect(scale.scaleState, PhotoViewScaleState.covering);
+    await tester.pumpAndSettle();
+    expect(controller.scale, greaterThan(1));
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    scale.dispose();
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final resetBeforeEnd in [false, true]) {
+    testWidgets('reset retires old gesture updates and ends: $resetBeforeEnd',
+        (tester) async {
+      final controller = _Controller();
+      var ends = 0;
+      await tester.pumpWidget(_view(
+          controller: controller,
+          onEnd: (context, details, value) {
+            ends++;
+            return false;
+          }));
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(const Offset(300, 250));
+      await gesture.moveBy(const Offset(70, 10));
+      await tester.pump();
+      controller.updateState!(null);
+      if (resetBeforeEnd) {
+        controller.reset();
+        await gesture.moveBy(const Offset(60, 20));
+      }
+      await gesture.up();
+      if (!resetBeforeEnd) {
+        controller.reset();
+      }
+      final resetValue = controller.value;
+      expect(resetValue.scale, 1);
+      expect(resetValue.position, Offset.zero);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      expect(ends, 0);
+      expect(controller.value, resetValue);
+      final next = await tester.startGesture(const Offset(300, 250));
+      await next.moveBy(const Offset(60, 10));
+      await next.up();
+      await tester.pumpAndSettle();
+      expect(ends, 1);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('owned replacement waits for the old offstage subtree to unmount',
       (tester) async {
     final borrowed = _Controller();
@@ -178,11 +257,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.listeners, 1);
     expect(controller.onDoubleClick, isNotNull);
+    expect(controller.onReset, isNotNull);
     controller.onDoubleClick!();
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     expect(controller.listeners, 0);
     expect(controller.onDoubleClick, isNull);
+    expect(controller.onReset, isNull);
     controller.dispose();
     expect(tester.takeException(), isNull);
   });
@@ -199,6 +280,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.listeners, 1);
     expect(scale.listeners, 1);
+    final reset = controller.onReset!;
     await tester.pumpWidget(const SizedBox());
     reports.clear();
     expect(controller.listeners, 0);
@@ -208,6 +290,8 @@ void main() {
     expect(controller.onDoubleClick, isNull);
     expect(controller.animateScale, isNull);
     expect(controller.getInitialScale, isNull);
+    expect(controller.onReset, isNull);
+    reset();
     controller.scale = 2;
     scale.scaleState = PhotoViewScaleState.covering;
     await tester.pump();
@@ -230,6 +314,7 @@ void main() {
     final doubleClick = old.onDoubleClick!;
     final animateScale = old.animateScale!;
     final initialScale = old.getInitialScale!;
+    final reset = old.onReset!;
     await tester.pumpWidget(
       _view(controller: current, scale: currentScale, onScale: reports.add),
     );
@@ -245,9 +330,17 @@ void main() {
     expect(current.scale, 1);
     expect(old.listeners, 0);
     expect(oldScale.listeners, 0);
+    expect(old.onReset, isNull);
     currentScale.scaleState = PhotoViewScaleState.zoomedIn;
     await tester.pumpAndSettle();
     expect(reports, contains(PhotoViewScaleState.zoomedIn));
+    currentScale.scaleState = PhotoViewScaleState.covering;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    reset();
+    expect(currentScale.scaleState, PhotoViewScaleState.covering);
+    await tester.pumpAndSettle();
+    expect(current.scale, 2);
     await tester.pumpWidget(const SizedBox());
     for (final c in [old, current]) {
       expect(c.disposals, 0);

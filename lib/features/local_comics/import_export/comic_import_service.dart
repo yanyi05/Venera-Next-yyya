@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_saf/flutter_saf.dart';
+import 'package:venera_saf/venera_saf.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart' as sql;
 import 'package:venera_next/features/comic_source/comic_source_api.dart';
@@ -97,14 +97,23 @@ enum ComicImportIssueKind {
   copyFailed,
   registrationFailed,
   archiveFailed,
+  directorySkipped,
   copyRecoveryRequired,
 }
 
 class ComicImportIssue {
-  const ComicImportIssue(this.kind, [this.error, this.stackTrace]);
+  const ComicImportIssue(this.kind, [this.error, this.stackTrace])
+    : sourceName = null;
+  const ComicImportIssue.archive(String name, this.error, this.stackTrace)
+    : kind = ComicImportIssueKind.archiveFailed,
+      sourceName = name;
+  const ComicImportIssue.directory(String name, this.error, [this.stackTrace])
+    : kind = ComicImportIssueKind.directorySkipped,
+      sourceName = name;
   final ComicImportIssueKind kind;
   final Object? error;
   final StackTrace? stackTrace;
+  final String? sourceName;
 }
 
 class PendingComicCopy {
@@ -169,26 +178,40 @@ class ComicImportService {
     final files = (await directory.list().toList()).whereType<File>().where(
       (file) => isComicArchiveFileName(file.name),
     );
+    final selections = files.map((file) => FileSelection(file.path)).toList();
+    try {
+      return await selectedArchives(selections, folder: folder);
+    } finally {
+      await Future.wait(selections.map((selection) => selection.dispose()));
+    }
+  }
+
+  Future<ComicImportResult> selectedArchives(
+    Iterable<FileSelection> files, {
+    String? folder,
+    void Function()? checkStop,
+  }) async {
     final issues = <ComicImportIssue>[];
     var count = 0;
     for (final file in files) {
+      checkStop?.call();
       try {
-        await CBZ.import(
-          file,
-          registerComic: (comic) => registerComic(comic, folder: folder),
+        await file.withFile(
+          (source) => CBZ.import(
+            source,
+            registerComic: (comic) => registerComic(comic, folder: folder),
+          ),
         );
         count++;
       } catch (error, stack) {
-        issues.add(
-          ComicImportIssue(ComicImportIssueKind.archiveFailed, error, stack),
-        );
+        issues.add(ComicImportIssue.archive(file.name, error, stack));
       }
     }
     if (count == 0) {
       issues.add(const ComicImportIssue(ComicImportIssueKind.noValidComics));
     }
     return ComicImportResult(
-      succeeded: true,
+      succeeded: count > 0,
       importedCount: count,
       issues: issues,
     );
@@ -256,25 +279,59 @@ class ComicImportOperation {
     required bool single,
     required bool copy,
     String? folder,
+    void Function(int scanned)? onScanProgress,
+    void Function()? onScanComplete,
   }) async {
     _checkActive();
     final imported = <String?, List<LocalComic>>{folder: []};
     final issues = <ComicImportIssue>[];
     try {
       if (single) {
-        final comic = await _checkSingleComic(directory);
+        String? rejected;
+        final comic = await _checkSingleComic(
+          directory,
+          onRejected: (reason) => rejected = reason,
+        );
         if (comic == null) {
           return ComicImportResult(
             succeeded: false,
-            issues: [const ComicImportIssue(ComicImportIssueKind.invalidComic)],
+            issues: [
+              ComicImportIssue(ComicImportIssueKind.invalidComic, rejected),
+            ],
           );
         }
         imported[folder]!.add(comic);
       } else {
-        await for (final entry in directory.list()) {
+        var scanned = 0;
+        await for (final entry in directory.list(followLinks: false)) {
           if (entry is Directory) {
-            final comic = await _checkSingleComic(entry);
-            if (comic != null) imported[folder]!.add(comic);
+            String? rejected;
+            try {
+              final comic = await _checkSingleComic(
+                entry,
+                onRejected: (reason) => rejected = reason,
+              );
+              if (comic != null) {
+                imported[folder]!.add(comic);
+              } else {
+                issues.add(
+                  ComicImportIssue.directory(
+                    entry.name,
+                    rejected ?? 'Invalid Comic',
+                  ),
+                );
+              }
+            } catch (error, stack) {
+              issues.add(ComicImportIssue.directory(entry.name, error, stack));
+            }
+            onScanProgress?.call(++scanned);
+          } else if (entry is Link) {
+            issues.add(
+              ComicImportIssue.directory(
+                path.basename(entry.path),
+                'Symbolic links are not imported',
+              ),
+            );
           }
         }
       }
@@ -282,8 +339,20 @@ class ComicImportOperation {
       issues.add(
         ComicImportIssue(ComicImportIssueKind.scanFailed, error, stack),
       );
+    } finally {
+      onScanComplete?.call();
     }
-    return _registerComics(imported, copy, issues);
+    final result = await _registerComics(imported, copy, issues);
+    if (result.importedCount > 0) return result;
+    return ComicImportResult(
+      succeeded: false,
+      issues: [
+        ...result.issues,
+        if (imported.values.every((comics) => comics.isEmpty))
+          const ComicImportIssue(ComicImportIssueKind.noValidComics),
+      ],
+      pendingCopies: result.pendingCopies,
+    );
   }
 
   Future<ComicImportResult> localDownloads({
@@ -832,8 +901,12 @@ class ComicImportOperation {
     List<String>? tags,
     DateTime? createTime,
     bool useRelativePath = false,
+    void Function(String reason)? onRejected,
   }) async {
-    if (!(await directory.exists())) return null;
+    if (!(await directory.exists())) {
+      onRejected?.call('Local path not found');
+      return null;
+    }
     if (ComicCopyRecord.exists(directory)) {
       throw StateError(
         'Recover the earlier comic copy before importing this directory: ${directory.path}',
@@ -841,6 +914,7 @@ class ComicImportOperation {
     }
     var name = title ?? directory.name;
     if (_manager.findByName(name) != null) {
+      onRejected?.call('A comic with this title already exists');
       Log.info("Import Comic", "Comic already exists: $name");
       return null;
     }
@@ -853,6 +927,9 @@ class ComicImportOperation {
       );
     }
     if (layout.nestedDirectories.isNotEmpty) {
+      onRejected?.call(
+        'Expected images or chapter folders, but found additional directory levels',
+      );
       final nested = layout.nestedDirectories.first;
       Log.info(
         "Import Comic",
@@ -862,6 +939,7 @@ class ComicImportOperation {
     }
     final cover = layout.inferredCover;
     if (!layout.hasImages || cover == null) {
+      onRejected?.call('No supported images found');
       Log.info("Import Comic", "Invalid Comic: $name\nNo cover image found.");
       return null;
     }
@@ -933,6 +1011,7 @@ class ComicImportOperation {
       comicType: comic.comicType,
       downloadedChapters: List<String>.of(comic.downloadedChapters),
       createdAt: comic.createdAt,
+      incompleteChapters: Map.unmodifiable(comic.incompleteChapters),
     );
     var startedWrite = false;
     var committed = false;
@@ -943,7 +1022,10 @@ class ComicImportOperation {
         translatedTags,
         append,
       ) {
-        final id = _manager.findValidId(captured.comicType);
+        final id = _manager.findValidId(
+          captured.comicType,
+          favoritesPath: favoritesPath,
+        );
         final favorite = FavoriteItem(
           id: id,
           name: captured.title,

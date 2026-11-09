@@ -33,6 +33,8 @@ List<Widget> buildReaderBottomActions(
   VoidCallback? onChapters,
   required VoidCallback onSave,
   required VoidCallback onShare,
+  VoidCallback? onCropImage,
+  VoidCallback? onImageText,
   VoidCallback? onEditImageMask,
   VoidCallback? onRevalidateImage,
 }) {
@@ -137,6 +139,18 @@ List<Widget> buildReaderBottomActions(
           icon: const Icon(Icons.library_books),
           onPressed: onChapters,
         ),
+      ),
+    if (onCropImage != null)
+      IconButton(
+        tooltip: '白边裁剪',
+        icon: const Icon(Icons.crop),
+        onPressed: onCropImage,
+      ),
+    if (onImageText != null)
+      IconButton(
+        tooltip: '识别文字与翻译',
+        icon: const Icon(Icons.document_scanner_outlined),
+        onPressed: onImageText,
       ),
     if (onEditImageMask != null)
       Tooltip(

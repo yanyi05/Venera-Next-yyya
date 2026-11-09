@@ -17,6 +17,7 @@ import 'package:venera_next/features/favorites/favorite_actions.dart';
 import 'package:venera_next/features/favorites/favorite_transfer_dialog.dart';
 import 'package:venera_next/features/favorites/favorite_models.dart';
 import 'package:venera_next/features/favorites/favorites_manager.dart';
+import 'package:venera_next/features/favorites/favorites_page.dart';
 import 'package:venera_next/features/favorites/local_favorites_page.dart';
 import 'package:venera_next/features/favorites/side_bar.dart';
 import 'package:venera_next/foundation/app.dart';
@@ -149,7 +150,10 @@ class _FolderCreationHost {
 }
 
 Future<void> _create(WidgetTester tester, String name) async {
-  await tester.enterText(find.byType(TextField), name);
+  await tester.enterText(
+    find.byKey(const ValueKey('favorite-folder-name')),
+    name,
+  );
   final action = tester
       .widget<FilledButton>(find.widgetWithText(FilledButton, 'Create'))
       .onPressed!;
@@ -205,6 +209,59 @@ void main() {
       );
     });
   });
+
+  for (final scenario in [
+    (width: 390.0, create: true),
+    (width: 390.0, create: false),
+    (width: 1200.0, create: true),
+    (width: 1200.0, create: false),
+  ]) {
+    testWidgets('real folder menu can reopen after closing: $scenario', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(scenario.width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final host = _FolderCreationHost()
+        ..content = Navigator(
+          onGenerateRoute: (_) =>
+              MaterialPageRoute<void>(builder: (_) => const FavoritesPage()),
+        );
+      await host.mount(tester);
+      await tester.pumpAndSettle();
+      if (scenario.width < 600) {
+        await tester.tap(find.byIcon(Icons.menu).hitTestable());
+        await tester.pumpAndSettle();
+      }
+      for (final name in ['First new folder', 'Second new folder']) {
+        await tester.tap(find.byIcon(Icons.more_horiz).hitTestable());
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Create Folder').hitTestable(),
+          findsOneWidget,
+          reason: 'Menu before creating $name',
+        );
+        await tester.tap(find.text('Create Folder').hitTestable());
+        await tester.pumpAndSettle();
+        expect(find.byType(CreateFavoriteFolderDialog), findsOneWidget);
+        if (scenario.create) {
+          await _create(tester, name);
+        } else {
+          await tester.tap(
+            find.descendant(
+              of: find.byType(CreateFavoriteFolderDialog),
+              matching: find.byIcon(Icons.close),
+            ),
+          );
+        }
+        await tester.pumpAndSettle();
+        expect(find.byType(CreateFavoriteFolderDialog), findsNothing);
+        expect(host.manager.folderNames.contains(name), scenario.create);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final built in [false, true]) {
     testWidgets('creation presentation ends after Navigator disposal: $built', (
@@ -275,7 +332,10 @@ void main() {
     await host.mount(tester);
     host.open().ignore();
     await pumpSidebar(tester);
-    await tester.enterText(find.byType(TextField), 'Original creation');
+    await tester.enterText(
+      find.byKey(const ValueKey('favorite-folder-name')),
+      'Original creation',
+    );
     final retained = tester
         .widget<FilledButton>(find.byType(FilledButton))
         .onPressed!;
@@ -403,7 +463,10 @@ void main() {
     await host.mount(tester);
     final create = host.open();
     await pumpSidebar(tester);
-    await tester.enterText(find.byType(TextField), 'Created');
+    await tester.enterText(
+      find.byKey(const ValueKey('favorite-folder-name')),
+      'Created',
+    );
     await tester.tap(find.text('Create'));
     await settleSidebarWork(tester, () => create);
     expect(host.manager.folderNames, contains('Created'));
@@ -500,7 +563,10 @@ void main() {
             );
         host.open().ignore();
         await pumpSidebar(tester);
-        await tester.enterText(find.byType(TextField), name);
+        await tester.enterText(
+          find.byKey(const ValueKey('favorite-folder-name')),
+          name,
+        );
         final release = Completer<void>();
         final replacement = AppDataOperations.instance.run(() async {
           await release.future;
@@ -576,7 +642,10 @@ void main() {
           .route!;
       await tester.tap(find.widgetWithText(TextButton, 'New Folder'));
       await pumpSidebar(tester);
-      await tester.enterText(find.byType(TextField), 'Accepted creation');
+      await tester.enterText(
+        find.byKey(const ValueKey('favorite-folder-name')),
+        'Accepted creation',
+      );
       final release = Completer<void>();
       final exclusive = AppDataOperations.instance.run(() => release.future);
       addTearDown(() {
@@ -636,7 +705,10 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'New Folder'));
     await pumpSidebar(tester);
     final creation = host.route(tester);
-    await tester.enterText(find.byType(TextField), 'Background destination');
+    await tester.enterText(
+      find.byKey(const ValueKey('favorite-folder-name')),
+      'Background destination',
+    );
     final release = Completer<void>();
     final exclusive = AppDataOperations.instance.run(() => release.future);
     addTearDown(() {
@@ -709,7 +781,10 @@ void main() {
         await host.mount(tester);
         await tester.tap(find.widgetWithText(ListTile, 'New Folder'));
         await pumpSidebar(tester);
-        await tester.enterText(find.byType(TextField), 'Created for original');
+        await tester.enterText(
+          find.byKey(const ValueKey('favorite-folder-name')),
+          'Created for original',
+        );
         final release = Completer<void>();
         final exclusive = AppDataOperations.instance.run(() => release.future);
         addTearDown(() {

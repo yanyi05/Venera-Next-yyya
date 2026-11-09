@@ -1,3 +1,5 @@
+import 'storage_management.dart';
+import 'package:venera_next/foundation/startup_journal.dart';
 import 'package:venera_next/foundation/app_sync_preferences.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'dart:async';
@@ -8,6 +10,8 @@ import 'package:venera_next/components/appbar.dart';
 import 'package:venera_next/components/button.dart';
 import 'package:venera_next/components/pop_up_widget.dart';
 import 'package:venera_next/components/scroll.dart';
+import 'package:venera_next/components/window_hotkey_scope.dart';
+import 'package:venera_next/features/settings/window_hotkey_setting.dart';
 import 'package:venera_next/features/settings/setting_components.dart';
 import 'package:venera_next/features/settings/app_controls.dart';
 import 'package:venera_next/features/settings/local_storage_settings.dart';
@@ -36,10 +40,34 @@ class _AppSettingsState extends State<AppSettings> {
   final _tasks = SettingsTaskPresenter();
   @override
   Widget build(BuildContext context) {
+    final hotkey = WindowHotkeyScope.maybeOf(context);
     return SmoothCustomScrollView(
       slivers: [
         SliverAppbar(title: Text("App".tl)),
         SettingPartTitle(title: "Data".tl, icon: Icons.storage),
+        if (StartupJournal.current case final journal?)
+          SwitchListTile(
+            title: const Text('恢复模式：停用已安装漫画源'),
+            subtitle: const Text('更改后需完全关闭并重新打开应用；不会删除漫画源与收藏。'),
+            value: journal.safeMode,
+            onChanged: (value) async {
+              await _tasks.run(
+                context,
+                task: (_) async {
+                  journal.setSafeMode(value);
+                  return null;
+                },
+                errorMessage: '保存失败',
+                onSuccess: () => setState(() {}),
+              );
+            },
+          ).toSliver(),
+        ListTile(
+          title: const Text('空间管理'),
+          subtitle: const Text('查看漫画占用，按漫画清理缓存，保留最近阅读。'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.to(() => const StorageManagementPage()),
+        ).toSliver(),
         const LocalStorageSettings().toSliver(),
         ListTile(
           title: Text("Cache Size".tl),
@@ -167,6 +195,10 @@ class _AppSettingsState extends State<AppSettings> {
           },
         ).toSliver(),
         if (!App.isLinux) const AuthorizationRequiredSetting().toSliver(),
+        if (App.isWindows && hotkey != null) ...[
+          SettingPartTitle(title: 'Window'.tl, icon: Icons.desktop_windows),
+          WindowHotkeySetting(controller: hotkey).toSliver(),
+        ],
       ],
     );
   }
