@@ -135,9 +135,14 @@ void main() {
   late _Controller controller;
   late GlobalKey<NavigatorState> navigator;
   int callbacks = 0;
+  int returns = 0;
   Future<void> Function()? onSuccess;
 
-  Future<AppWebview> show(WidgetTester tester) async {
+  Future<AppWebview> show(
+    WidgetTester tester, {
+    bool verification = false,
+    bool Function()? ready,
+  }) async {
     final root = io.Directory.systemTemp.createTempSync('source-web-login-');
     App.dataPath = root.path;
     final previous = InAppWebViewPlatform.instance;
@@ -157,6 +162,7 @@ void main() {
     controller = _Controller(local);
     platform.controller = controller;
     callbacks = 0;
+    returns = 0;
     onSuccess = null;
     source = ComicSourceFixture(
       key: 'web_login',
@@ -166,7 +172,7 @@ void main() {
         'https://example.test/',
         null,
         () {},
-        (_, _) => true,
+        (_, _) => ready?.call() ?? true,
         () async {
           callbacks++;
           await onSuccess?.call();
@@ -204,18 +210,56 @@ void main() {
         builder: (_, child) =>
             SourceInstallationsScope(queue: queue, child: child!),
         navigatorKey: navigator,
-        home: const ComicSourcePage(),
+        home: verification
+            ? Scaffold(
+                body: SourceVerificationButton(
+                  sourceKey: source.key,
+                  label: true,
+                  onReturned: () => returns++,
+                ),
+              )
+            : const ComicSourcePage(),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Show source settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Log in'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Login with webview'));
+    if (verification) {
+      await tester.tap(find.text('Website verification'));
+    } else {
+      await tester.tap(find.byTooltip('Show source settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Log in'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Login with webview'));
+    }
     await tester.pumpAndSettle();
     return tester.widget<AppWebview>(find.byType(AppWebview));
   }
+
+  testWidgets(
+    'direct verification captures cookies after load completes and returns once',
+    (tester) async {
+      var ready = false;
+      final web = await show(tester, verification: true, ready: () => ready);
+      web.onTitleChange!('Verifying', controller);
+      await tester.pumpAndSettle();
+      expect(callbacks, 0);
+      ready = true;
+      web.onLoadStop!(controller);
+      web.onLoadStop!(controller);
+      await tester.pumpAndSettle();
+      expect(callbacks, 1);
+      expect(returns, 1);
+      expect(find.byType(AppWebview), findsNothing);
+      expect(
+        SingleInstanceCookieJar.instance!
+            .loadForRequest(Uri.parse('https://example.test/'))
+            .single
+            .value,
+        'value',
+      );
+    },
+    skip: io.Platform.isLinux,
+  );
 
   testWidgets(
     'web login coalesces callbacks and retries only the captured save',

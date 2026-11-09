@@ -48,6 +48,12 @@ extension WebviewExtension on InAppWebViewController {
     for (var cookie in cookies) {
       var c = io.Cookie(cookie.name, cookie.value);
       c.domain = cookie.domain;
+      c.path = cookie.path;
+      c.expires = cookie.expiresDate == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(cookie.expiresDate!);
+      c.secure = cookie.isSecure ?? false;
+      c.httpOnly = cookie.isHttpOnly ?? false;
       res.add(c);
     }
     return res;

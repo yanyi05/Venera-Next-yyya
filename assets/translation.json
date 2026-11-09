@@ -1,5 +1,8 @@
 {
   "zh_CN": {
+    "Website verification": "网站验证",
+    "Choose source to verify": "选择要验证的漫画源",
+    "No source provides website verification": "此漫画源尚未提供网页验证入口",
     "Preparing selected folder": "正在复制所选文件夹",
     "Scanning and importing comics": "正在扫描漫画",
     "Scanned @a folders; preparing import": "已扫描 @a 个文件夹，正在准备导入",

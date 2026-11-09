@@ -86,6 +86,14 @@ void main() {
           (await wrapped.getCookies('https://example.test/'))!.single.value,
           'synthetic',
         );
+        final cookie = (await wrapped.getCookies(
+          'https://example.test/',
+        ))!.single;
+        expect(cookie.domain, 'example.test');
+        expect(cookie.path, '/reader');
+        expect(cookie.secure, isTrue);
+        expect(cookie.httpOnly, isTrue);
+        expect(cookie.expires?.millisecondsSinceEpoch, 2000000000000);
         expect(platform.cookieEnvironments.last, same(environment));
         await tester.pumpWidget(const SizedBox());
         await tester.pump();
@@ -397,7 +405,15 @@ class _Cookies extends WindowsCookieManager {
   }) async {
     owner.cookieEnvironments.add(params.webViewEnvironment);
     return [
-      Cookie(name: 'session', value: 'synthetic', domain: 'example.test'),
+      Cookie(
+        name: 'session',
+        value: 'synthetic',
+        domain: 'example.test',
+        path: '/reader',
+        expiresDate: 2000000000000,
+        isSecure: true,
+        isHttpOnly: true,
+      ),
     ];
   }
 }

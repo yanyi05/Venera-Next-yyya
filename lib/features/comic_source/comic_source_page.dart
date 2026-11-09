@@ -40,6 +40,132 @@ import 'source_update_service.dart';
 import 'source_update_prompt.dart';
 import 'source_mutation_failure.dart';
 
+/// Opens a source's existing web login flow from browsing or reader pages.
+/// A successful verification captures the current cookies and source storage.
+Future<void> openSourceWebLogin(
+  BuildContext context,
+  ComicSource source,
+) async {
+  if (source.account?.loginWebsite == null ||
+      !identical(ComicSource.find(source.key), source) ||
+      !NavigationAdmission.allows(context)) {
+    return;
+  }
+  late final CookieJarSql cookieJar;
+  try {
+    cookieJar = await SingleInstanceCookieJar.captureInstance();
+  } catch (error, stack) {
+    Log.error('Source web login', error, stack);
+    if (context.mounted) context.showMessage(message: error.toString());
+    return;
+  }
+  if (!context.mounted ||
+      !NavigationAdmission.allows(context) ||
+      !identical(ComicSource.find(source.key), source)) {
+    return;
+  }
+  await context.to(
+    () => SourceWebLoginPage(source: source, cookieJar: cookieJar),
+  );
+}
+
+/// Open the source's own browser verification flow, without parsing error text.
+/// Mixed-source pages ask which source to verify instead of guessing a host.
+Future<bool> verifyComicSource(
+  BuildContext context, {
+  String? sourceKey,
+}) async {
+  final sources = ComicSource.all().where((source) {
+    final uri = Uri.tryParse(source.account?.loginWebsite ?? '');
+    return (sourceKey == null || source.key == sourceKey) &&
+        uri != null &&
+        uri.hasAuthority &&
+        (uri.scheme == 'https' || uri.scheme == 'http');
+  }).toList();
+  if (sources.isEmpty) {
+    context.showMessage(message: 'No source provides website verification'.tl);
+    return false;
+  }
+  ComicSource? source;
+  if (sources.length == 1) {
+    source = sources.single;
+  } else {
+    source = await showDialog<ComicSource>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Choose source to verify'.tl),
+        children: [
+          for (final item in sources)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, item),
+              child: Text(item.name),
+            ),
+        ],
+      ),
+    );
+  }
+  if (!context.mounted || source == null) return false;
+  await openSourceWebLogin(context, source);
+  return true;
+}
+
+class SourceVerificationButton extends StatefulWidget {
+  const SourceVerificationButton({
+    super.key,
+    this.sourceKey,
+    this.label = false,
+    this.onReturned,
+  });
+  final String? sourceKey;
+  final bool label;
+  final VoidCallback? onReturned;
+
+  @override
+  State<SourceVerificationButton> createState() =>
+      _SourceVerificationButtonState();
+}
+
+class _SourceVerificationButtonState extends State<SourceVerificationButton> {
+  bool _opening = false;
+
+  Future<void> _open() async {
+    if (_opening) return;
+    final sourceKey = widget.sourceKey;
+    setState(() => _opening = true);
+    try {
+      final opened = await verifyComicSource(context, sourceKey: sourceKey);
+      if (opened && mounted && widget.sourceKey == sourceKey) {
+        widget.onReturned?.call();
+      }
+    } catch (error, stack) {
+      Log.error('Website verification', error, stack);
+      if (mounted) context.showMessage(message: error.toString());
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.sourceKey != null &&
+        ComicSource.find(widget.sourceKey!)?.account?.loginWebsite == null) {
+      return const SizedBox.shrink();
+    }
+    if (widget.label) {
+      return TextButton.icon(
+        onPressed: _opening ? null : _open,
+        icon: const Icon(Icons.language),
+        label: Text('Website verification'.tl),
+      );
+    }
+    return IconButton(
+      tooltip: 'Website verification'.tl,
+      onPressed: _opening ? null : _open,
+      icon: const Icon(Icons.language),
+    );
+  }
+}
+
 class ComicSourcePage extends StatelessWidget {
   const ComicSourcePage({
     super.key,
@@ -1278,7 +1404,7 @@ class _LoginPageState extends SettingsSaveState<_LoginPage> {
       return;
     }
     await context.to(
-      () => _SourceWebLoginPage(source: target, cookieJar: cookieJar!),
+      () => SourceWebLoginPage(source: target, cookieJar: cookieJar!),
     );
     if (mounted &&
         target.isLogged &&
@@ -1288,15 +1414,19 @@ class _LoginPageState extends SettingsSaveState<_LoginPage> {
   }
 }
 
-class _SourceWebLoginPage extends StatefulWidget {
-  const _SourceWebLoginPage({required this.source, required this.cookieJar});
+class SourceWebLoginPage extends StatefulWidget {
+  const SourceWebLoginPage({
+    super.key,
+    required this.source,
+    required this.cookieJar,
+  });
   final ComicSource source;
   final CookieJarSql cookieJar;
   @override
-  State<_SourceWebLoginPage> createState() => _SourceWebLoginPageState();
+  State<SourceWebLoginPage> createState() => _SourceWebLoginPageState();
 }
 
-class _SourceWebLoginPageState extends SettingsSaveState<_SourceWebLoginPage> {
+class _SourceWebLoginPageState extends SettingsSaveState<SourceWebLoginPage> {
   late String url = widget.source.account!.loginWebsite!;
   String title = '';
   DesktopWebview? _desktop;
@@ -1488,6 +1618,7 @@ class _SourceWebLoginPageState extends SettingsSaveState<_SourceWebLoginPage> {
                     title = value;
                     _validateEmbedded(controller);
                   },
+                  onLoadStop: _validateEmbedded,
                 ),
               ),
       ),

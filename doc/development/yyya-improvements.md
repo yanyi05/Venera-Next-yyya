@@ -15,7 +15,7 @@
 - iPhone 接入系统实况文本，提供选字、复制和系统翻译入口；不支持的设备不显示按钮。使用 [Apple VisionKit 接口](https://developer.apple.com/documentation/visionkit/enabling-live-text-interactions-with-images)。
 - 增加手动工作流“yyya Windows 与 iPhone 构建”，只调用这两个平台的构建，不自动发布。
 
-原 ZIP 目录未改动。依赖锁文件与上游 v1.18.3 一致。没有推送 GitHub、发布 Release 或启动付费服务。
+原 ZIP 目录未改动。依赖锁文件与上游 v1.18.3 一致。分支代码已上传 GitHub，没有发布 Release 或启动付费服务。
 
 ## Windows 验证
 
@@ -34,13 +34,23 @@
 
 回归统计包含重叠用例，不能相加。测试日志和构建输出不加入版本控制。Windows 启动使用独立数据目录 `build/windows-smoke-profile`，没有升级日常使用的数据。
 
-Windows 程序位于 `build/windows/x64/runner/Debug/VeneraNext.exe`，运行需要旁边的 DLL 与 data 目录；这是调试验证产物，未制作正式发行包。
+Windows 调试程序位于 `build/windows/x64/runner/Debug/VeneraNext.exe`。之后另外完成了 Windows Release 本地构建（596.5 秒），位于 `build/windows/x64/runner/Release/VeneraNext.exe`；完整压缩包包含 66 个文件，已校验 CRC 和文件清单，不能单独复制 EXE。
+
+## 网站验证入口补回
+
+之前的 `reader-mask-tools` 分支含有浏览器验证入口，而首次同步使用的是 fork 的 `main`，没有包含该入口。本轮移植相关入口与发现页漫画源替换后的回调更新，不合并该分支其他无关功能。保留 v1.18.3 对漫画列表请求生命周期的上游修改。
+
+发现页工具栏和失败页、分类页工具栏提供“网站验证”；验证完成并保存后返回原页面重试。恢复动作不解析错误文本来猜测站点，只使用漫画源声明的网页登录地址。补回的源替换/移除处理防止旧源回调在验证返回后继续被调用。
+
+另外修正 WebView Cookie 转换时丢失路径、有效期、Secure 与 HttpOnly 的问题，并在页面加载完成后再次检查源的验证成功条件。没有改动用户实际的 Cookie 值、安装源脚本或网络设置。
+
+73 项相关回归测试通过，覆盖入口显示、验证完成后保存并返回、旧源替换和移除、Cookie 属性、窗口代理与浏览器回调释放。日志：`logs/browser-verification-tests.log`。改动文件的严格静态分析、结构导入与架构边界检查也通过。这些测试不等于真实站点会话可复用；网站过期策略、源配置中的域名/UA、浏览器与原生请求环境仍可能导致重新验证。
 
 ## iPhone 与验收限制
 
 按用户要求只针对 Windows 与 iPhone 验证，不再运行鸿蒙平台测试。上游已有的其他平台代码随合并保留。
 
-当前机器是 Windows，没有 macOS/Xcode，因此尚未编译 Swift、构建 IPA 或连接 iPhone 真机。iOS 文字识别、缩放、系统翻译菜单、内存告警及后台恢复仍需用 macOS 构建后，在 iPhone 上验收。工作流尚未上传或运行。
+当前机器是 Windows，没有 macOS/Xcode，因此尚未在本机编译 Swift、构建 IPA 或连接 iPhone 真机。iOS 文字识别、缩放、系统翻译菜单、内存告警及后台恢复仍需用 macOS 构建后，在 iPhone 上验收。分支已包含可手动运行的 Windows/iPhone 构建工作流；本机检查没有验证远端 iOS 构建结果。
 
 不能将启动诊断与防御性修改视为原白屏闪退已修复。仍需出问题的 iPhone 系统 `.ips` 崩溃记录，以区分签名、原生库和 Dart 初始化阶段的问题；当前没有该记录。
 
