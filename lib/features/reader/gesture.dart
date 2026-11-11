@@ -44,6 +44,7 @@ class ReaderGestureDetectorState extends State<ReaderGestureDetector>
   static const _doubleTapDelay = Duration(milliseconds: 200);
   static const _longPressDelay = Duration(milliseconds: 250);
   static const _distanceSquared = 20.0 * 20.0;
+  static const _tapSlopSquared = 8.0 * 8.0;
   late TapGestureRecognizer _recognizer;
   final _pointers = <int>{};
   final _dragListeners = <ReaderDragListener>{};
@@ -293,6 +294,7 @@ class ReaderGestureDetectorState extends State<ReaderGestureDetector>
     if (event.pointer == _primaryPointer) {
       _movement += event.delta;
       _lastPosition = event.position;
+      _cancelMovedTap();
     }
     for (final listener in List.of(_drag)) {
       if (!_drag.contains(listener)) continue;
@@ -312,6 +314,8 @@ class ReaderGestureDetectorState extends State<ReaderGestureDetector>
       return;
     }
     if (event.pointer == _primaryPointer) {
+      _movement += event.position - _lastPosition;
+      _cancelMovedTap();
       _longPressTimer?.cancel();
       _longPressTimer = null;
       _primaryPointer = null;
@@ -330,6 +334,14 @@ class ReaderGestureDetectorState extends State<ReaderGestureDetector>
       }
     }
     _releaseCompletedPointers();
+  }
+
+  void _cancelMovedTap() {
+    // Short scrolls can stay inside Flutter's default tap tolerance.
+    if (_movement.distanceSquared > _tapSlopSquared) {
+      cancelPendingTap();
+      _tapTarget = null;
+    }
   }
 
   void _finishDrag({required bool cancelled}) {
@@ -527,6 +539,16 @@ class ReaderGestureDetectorState extends State<ReaderGestureDetector>
         request.turnWheel(event.scrollDelta.dy > 0);
       }
     },
-    child: ReaderTapScope(ignoreNextTap: ignoreNextTap, child: widget.child),
+    child: NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollStartNotification ||
+            notification is ScrollUpdateNotification) {
+          cancelPendingTap();
+          _tapTarget = null;
+        }
+        return false;
+      },
+      child: ReaderTapScope(ignoreNextTap: ignoreNextTap, child: widget.child),
+    ),
   );
 }

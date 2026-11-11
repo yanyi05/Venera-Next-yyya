@@ -3,7 +3,7 @@ import 'reader_entry_loader.dart';
 import 'package:venera_next/network/request_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/loading.dart';
-import 'package:venera_next/features/comic_source/comic_source_api.dart';
+import 'package:venera_next/features/comic_source/comic_source.dart';
 import 'package:venera_next/features/history/history_manager.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/features/reader/reader_page.dart';
@@ -50,6 +50,20 @@ class _ReaderWithLoadingState
       retry();
     }
   }
+
+  @override
+  Widget buildError() => NetworkError(
+    message: error!,
+    retry: retry,
+    action: widget.sourceKey == 'local'
+        ? null
+        : SourceVerificationButton(
+            key: ValueKey((widget.id, widget.sourceKey)),
+            sourceKey: widget.sourceKey,
+            label: true,
+            onReturned: retry,
+          ),
+  );
 
   @override
   Widget buildContent(BuildContext context, ReaderProps data) {

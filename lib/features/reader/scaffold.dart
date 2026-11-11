@@ -1,4 +1,6 @@
 import 'image_text.dart';
+import 'package:venera_next/features/comic_source/comic_source.dart'
+    show SourceVerificationButton;
 import 'crop_settings_dialog.dart';
 import 'reader_image_tools.dart';
 import 'package:venera_next/foundation/image_crop.dart';
@@ -336,6 +338,8 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     chapterTitle: widget.data.chapterTitle,
     onBack: () => unawaited(widget.onExit()),
     actions: [
+      if (widget.data.sourceKey != 'local')
+        SourceVerificationButton(sourceKey: widget.data.sourceKey),
       if (widget.onDiagnostics != null && widget.imageWork.diagnostics != null)
         ListenableBuilder(
           listenable: widget.imageWork.diagnostics!,

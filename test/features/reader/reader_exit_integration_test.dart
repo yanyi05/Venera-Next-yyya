@@ -22,6 +22,7 @@ import 'package:venera_next/features/comic_source/comic_source_api.dart'
     show
         ComicSource,
         ComicSourceManager,
+        AccountConfig,
         configureComicSourceRegistry,
         ChapterCommentsLoader,
         SendChapterCommentFunc,
@@ -29,6 +30,8 @@ import 'package:venera_next/features/comic_source/comic_source_api.dart'
         LoadComicPagesFunc,
         VoteCommentFunc;
 import 'package:venera_next/features/reader/chapter_comments.dart';
+import 'package:venera_next/features/comic_source/comic_source_page.dart'
+    show SourceVerificationButton;
 import 'package:venera_next/foundation/res.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
 import 'package:venera_next/foundation/image_work.dart';
@@ -501,6 +504,70 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'online reader offers verification in toolbar and chapter error',
+    (tester) async {
+      final fixture = await _ReaderFixture.create(tester);
+      final manager = ComicSourceManager();
+      var calls = 0;
+      final source = _ReaderPagesSource(
+        (_, _) async {
+          calls++;
+          return const Res.error('Chapter session expired');
+        },
+        account: AccountConfig(
+          null,
+          'https://example.test/',
+          null,
+          () {},
+          null,
+          null,
+          null,
+          null,
+        ),
+      );
+      configureComicSourceRegistry(
+        all: () => [source],
+        find: (key) => key == source.key ? source : null,
+        fromIntKey: (_) => source,
+        isEmpty: () => false,
+      );
+      try {
+        await fixture.mount(
+          tester,
+          pushed: false,
+          expectContent: false,
+          comicType: const _OtherComicType(),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Chapter session expired'), findsOneWidget);
+        final buttons = tester
+            .widgetList<SourceVerificationButton>(
+              find.byType(SourceVerificationButton),
+            )
+            .toList();
+        expect(buttons, hasLength(2));
+        expect(
+          buttons.every((button) => button.sourceKey == source.key),
+          isTrue,
+        );
+        final before = calls;
+        buttons.singleWhere((button) => button.label).onReturned!();
+        await tester.pumpAndSettle();
+        expect(calls, greaterThan(before));
+        expect(tester.takeException(), isNull);
+      } finally {
+        await fixture.dispose(tester);
+        configureComicSourceRegistry(
+          all: manager.all,
+          find: manager.find,
+          fromIntKey: manager.fromIntKey,
+          isEmpty: () => manager.isEmpty,
+        );
+      }
+    },
+  );
 
   testWidgets(
     'source replacement reloads images while exit drains the original chapter',
@@ -5186,8 +5253,12 @@ class _ReaderCommentSource extends Fake implements ComicSource {
 }
 
 class _ReaderPagesSource extends _ReaderCommentSource {
-  _ReaderPagesSource(this._loadPages);
+  _ReaderPagesSource(this._loadPages, {AccountConfig? account})
+    : _account = account;
   final LoadComicPagesFunc _loadPages;
+  final AccountConfig? _account;
+  @override
+  AccountConfig? get account => _account;
   @override
   String get key => 'replacement';
   @override

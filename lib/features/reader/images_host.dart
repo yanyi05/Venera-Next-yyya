@@ -9,6 +9,7 @@ import 'package:venera_next/features/reader/reader_controller.dart';
 import 'package:venera_next/features/comic_source/comic_source.dart';
 import 'package:venera_next/features/reader/chapter_comments.dart';
 import 'package:venera_next/foundation/appdata.dart';
+import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/foundation/tv_reader_policy.dart';
 import 'image_read.dart';
 
@@ -88,7 +89,19 @@ class ReaderImagesHost extends StatelessWidget {
           }
         },
         child: SizedBox.expand(
-          child: NetworkError(message: error, retry: retry),
+          child: NetworkError(
+            message: error,
+            retry: retry,
+            action: reader.type == ComicType.local
+                ? null
+                : SourceVerificationButton(
+                    sourceKey: reader.type.sourceKey,
+                    label: true,
+                    onReturned: () {
+                      if (current() && chapters.canInteract()) retry();
+                    },
+                  ),
+          ),
         ),
       ),
       contentBuilder: (context, content) =>

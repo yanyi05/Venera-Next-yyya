@@ -148,6 +148,108 @@ class _Fixture {
 }
 
 void main() {
+  for (final doubleTap in [false, true]) {
+    for (final returnToStart in [false, true]) {
+      testWidgets(
+        'short swipes never tap; doubleTap=$doubleTap return=$returnToStart',
+        (tester) async {
+          final f = _Fixture()..doubleTap = doubleTap;
+          await f.mount(tester);
+          final pointer = await tester.startGesture(f.center(tester));
+          await pointer.moveBy(const Offset(0, 12));
+          if (returnToStart) await pointer.moveBy(const Offset(0, -12));
+          await pointer.up();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(f.calls, isEmpty);
+          expect(f.viewport.calls, isEmpty);
+          expect(f.pauses, isEmpty);
+
+          final tap = await tester.startGesture(f.center(tester));
+          await tap.moveBy(const Offset(2, 2));
+          await tap.up();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(f.calls, ['menu']);
+          await f.dispose(tester);
+        },
+      );
+    }
+  }
+
+  testWidgets('a swipe cancels the single tap waiting before it', (
+    tester,
+  ) async {
+    final f = _Fixture();
+    await f.mount(tester);
+    await tester.tapAt(f.center(tester));
+    await tester.pump(const Duration(milliseconds: 50));
+    final swipe = await tester.startGesture(f.center(tester));
+    await swipe.moveBy(const Offset(0, 12));
+    await swipe.up();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(f.calls, isEmpty);
+    expect(f.viewport.calls, isEmpty);
+    await f.dispose(tester);
+  });
+
+  testWidgets('iOS-style scrolling still moves content without opening menus', (
+    tester,
+  ) async {
+    final f = _Fixture();
+    final scroll = ScrollController();
+    await f.mount(
+      tester,
+      child: ListView.builder(
+        controller: scroll,
+        physics: const BouncingScrollPhysics(),
+        itemCount: 20,
+        itemExtent: 100,
+        itemBuilder: (_, index) => Text('Page $index'),
+      ),
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -150));
+    await tester.pumpAndSettle();
+    expect(scroll.offset, greaterThan(0));
+    expect(f.calls, isEmpty);
+    expect(f.viewport.calls, isEmpty);
+    await tester.tapAt(f.center(tester));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(f.calls, ['menu']);
+    await f.dispose(tester);
+    scroll.dispose();
+  });
+
+  testWidgets('scrolling cancels a pending menu tap', (tester) async {
+    final f = _Fixture();
+    late BuildContext scrollContext;
+    await f.mount(
+      tester,
+      child: Builder(
+        builder: (context) {
+          scrollContext = context;
+          return const ColoredBox(color: Colors.blue);
+        },
+      ),
+    );
+    await tester.tapAt(f.center(tester));
+    ScrollUpdateNotification(
+      metrics: FixedScrollMetrics(
+        minScrollExtent: 0,
+        maxScrollExtent: 1000,
+        pixels: 10,
+        viewportDimension: 400,
+        axisDirection: AxisDirection.down,
+        devicePixelRatio: 1,
+      ),
+      context: scrollContext,
+      scrollDelta: 10,
+    ).dispatch(scrollContext);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(f.calls, isEmpty);
+    expect(f.viewport.calls, isEmpty);
+    await f.dispose(tester);
+  });
+
   testWidgets('accepted menu image read drains after its owner is removed', (
     tester,
   ) async {
