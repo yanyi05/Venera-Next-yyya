@@ -25,6 +25,8 @@ import 'package:venera_next/features/comic_details/cover_viewer.dart';
 import 'package:venera_next/features/comic_details/thumbnails.dart';
 import 'package:venera_next/foundation/app_locale.dart';
 import 'package:venera_next/features/comic_source/comic_source.dart';
+import 'package:venera_next/features/comic_source/comic_source_page.dart'
+    show SourceVerificationButton;
 import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/foundation/consts.dart';
 import 'package:venera_next/foundation/context.dart';
@@ -159,7 +161,23 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         },
       );
     }
-    return NetworkError(message: error!, retry: retry, action: action);
+    return NetworkError(
+      message: error!,
+      retry: retry,
+      action: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ?action,
+          if (widget.sourceKey != 'local')
+            SourceVerificationButton(
+              key: ValueKey((widget.id, widget.sourceKey)),
+              sourceKey: widget.sourceKey,
+              label: true,
+              onReturned: retry,
+            ),
+        ],
+      ),
+    );
   }
 
   @override
